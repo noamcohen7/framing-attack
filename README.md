@@ -13,14 +13,19 @@ toward a wrong answer.
 
 ```bash
 python3.12 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
+.venv/bin/pip install -e ".[dev]"          # API clients + tests, no torch
+.venv/bin/pip install -e ".[nli]"          # optional: local NLI validator (torch, ~2 GB)
 .venv/bin/pip install "httpx[socks]" truststore   # corporate TLS / proxies
 cp .env.example .env                                # then fill in a key
 .venv/bin/python -m pytest                          # offline unit tests
 ```
 
 The NLI model (`cross-encoder/nli-deberta-v3-base`, ~700 MB) downloads on first
-use and runs locally (Apple GPU via MPS, CUDA, or CPU).
+use and runs locally (Apple GPU via MPS, CUDA, or CPU). On a low-resource machine
+skip the `nli` extra and set `equivalence.nli_model: null` for judge-only mode
+(see `config/three-model.yaml`).
+
+Next steps and full project state: see `NEXT_SESSION.md`.
 
 ## Providers and keys
 
@@ -42,6 +47,9 @@ use and runs locally (Apple GPU via MPS, CUDA, or CPU).
 
 # Small search budget (finishes in minutes on a free tier)
 .venv/bin/python scripts/run_attack.py --config config/smoke.yaml --dataset custom --max-samples 3
+
+# Three different models, no local models (Groq target + auxiliary, Gemini judge)
+.venv/bin/python scripts/run_attack.py --config config/three-model.yaml --dataset custom --max-samples 3
 
 # Paid OpenAI, parallel requests, no pacing
 .venv/bin/python scripts/run_attack.py --config config/openai.yaml --dataset custom --max-samples 3
@@ -78,7 +86,10 @@ Cost is taken from the API when reported (OpenRouter) or estimated from the
   honours the server's retry delay; optional concurrency; budget hooks.
 - New `src/models/budget.py` (per-run spend/request cap) and
   `src/models/openai_compat.py` (OpenAI / OpenRouter client).
-- New `config/smoke.yaml` and `config/openai.yaml` overrides.
+- Scorer: refusals excluded from the wrongness score (`abstention_policy`), reported separately.
+- Attack results checkpointed after every question, with per-candidate responses.
+- NLI stage optional (`nli_model: null`), torch moved to the `nli` extra.
+- New `config/smoke.yaml`, `config/openai.yaml`, `config/three-model.yaml` overrides.
 
 ## Layout
 
