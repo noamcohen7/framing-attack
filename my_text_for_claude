@@ -1,0 +1,22 @@
+2. Get the keys for the three models. On the new machine put them in the project's .env:
+
+- GROQ_API_KEY from console.groq.com, under API Keys. Groq serves the target (Llama 3.1 8B, weak on pand the auxiliary (Llama3.3 70B).
+- GEMINI_API_KEY, the one the judge. I read your"jev" as Gemini; if you meant a different model, tell the next session and
+  it's a one-line config c
+- Optionally OPENAI_API_KEY with a hard monthly budget if Groq's free daily
+  token cap turns out too
+
+3. Start the new session oasting this:
+
+Clone https://github.com/<tack and readNEXT_SESSION.md
+first; it has the full prond the ordered remaining
+work. This machine is low-resource: install without the nli extra, run no
+local models, keep nli_modmodels, one per role:
+target llama-3.1-8b-instant (Groq), auxiliary llama-3.3-70b-versatile (Groq),
+judge gemini-3.5-flash-litenv. Keep the in-code
+budget cap on. Start by running the two smoke commands in NEXT_SESSION.md
+with config/three-model.yaaks, then work through
+the remaining-work list in order: Phase 0 gaps, Phase 1 full run, Phase 2
+analysis, Phase 3 defenses
+
+What the handoff covers: ss verified and what isn't(the Groq client has never run live because there was no key), the smoke commands, the ordered remahases, and the gotchaslearned here (thinking models returning empty text, free-tier pacing, refusals not counting as flips, che
