@@ -1,0 +1,29 @@
+# =============================================================================
+# Paid OpenAI override: no client-side pacing, parallel sampling, hard budget.
+#   python scripts/run_baselines.py --config config/openai.yaml --dataset custom --max-samples 3
+#   python scripts/run_attack.py    --config config/openai.yaml --dataset custom --max-samples 3
+# =============================================================================
+target_model:
+  provider: "openai"
+  model_name: "gpt-4.1-mini"
+  requests_per_minute: null
+  concurrency: 8
+
+auxiliary_model:
+  provider: "openai"
+  model_name: "gpt-4.1-mini"
+  temperature: 0.9
+  max_tokens: 512
+  requests_per_minute: null
+  concurrency: 8
+
+equivalence:
+  llm_judge:
+    provider: "openai"
+    model_name: "gpt-4.1-mini"
+    requests_per_minute: null
+    concurrency: 8
+
+budget:
+  max_requests: 3000
+  max_usd: 2.0

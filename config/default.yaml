@@ -1,0 +1,80 @@
+# =============================================================================
+# Framing Attack — Default Configuration
+# =============================================================================
+
+# --- Target model (the model we're trying to fool) ---
+target_model:
+  provider: "gemini"                # gemini | groq
+  model_name: "gemini-3.5-flash-lite"   # Free-tier Gemini model
+  temperature: 0.0                  # Deterministic for baseline; >0 for sampling
+  max_tokens: 256
+  num_samples: 5                    # Repeated samples for empirical error rate
+  requests_per_minute: 15           # Client-side pacing (free tier = 15 RPM per model); null disables
+  concurrency: 1                    # Parallel requests when sampling (raise on paid tiers)
+
+# --- Auxiliary model (generates paraphrases) ---
+auxiliary_model:
+  provider: "gemini"
+  model_name: "gemini-3.5-flash-lite"
+  temperature: 0.9                  # High creativity for diverse rephrasings
+  max_tokens: 512
+  requests_per_minute: 15
+
+# --- Equivalence validator ---
+equivalence:
+  # NLI model (runs locally, free). Set to null to skip it (judge-only mode,
+  # no torch/transformers needed - for low-resource machines).
+  nli_model: "cross-encoder/nli-deberta-v3-base"
+  nli_threshold: 0.85               # Min entailment probability (bidirectional)
+  # LLM judge (second-pass filter)
+  llm_judge:
+    provider: "gemini"
+    model_name: "gemini-3.5-flash-lite"
+    temperature: 0.0
+    requests_per_minute: 15
+  # Both must agree for a candidate to pass
+  require_both: true
+
+# --- Dataset ---
+dataset:
+  name: "triviaqa"                  # triviaqa | natural_questions | custom
+  split: "validation"
+  max_samples: 200                  # Number of questions to attack
+  filter_single_answer: true        # Only keep questions with a single canonical answer
+
+# --- Evolutionary search (Phase 1) ---
+evolution:
+  population_size: 10               # Candidates per generation
+  num_generations: 20               # Max generations
+  mutation_rate: 0.3                # Fraction of population to mutate
+  crossover_rate: 0.2               # Fraction to recombine
+  elite_count: 2                    # Top candidates preserved unchanged
+  early_stop_score: 1.0             # Stop if we achieve perfect wrongness
+
+# --- Answer extraction ---
+answer_extraction:
+  method: "llm"                     # llm | regex | hybrid
+  normalize: true                   # Lowercase, strip articles, etc.
+  equivalence_check: "fuzzy"        # exact | fuzzy | llm
+  abstention_policy: "exclude"      # how refusals count toward wrongness: exclude | incorrect | correct
+
+# --- Baselines ---
+baselines:
+  num_naive_paraphrases: 5          # Random rewrites per question
+  num_samples_per_paraphrase: 5     # Repeated queries per paraphrase
+
+# --- Budget (hard per-run ceiling; the run stops when either cap is hit) ---
+budget:
+  max_requests: 3000
+  max_usd: 2.0
+  prices:                           # USD per 1M tokens, for cost estimation
+    gemini-3.5-flash-lite: {input_per_m: 0.30, output_per_m: 2.50}
+    gpt-4.1-mini: {input_per_m: 0.40, output_per_m: 1.60}
+    gpt-4.1-nano: {input_per_m: 0.10, output_per_m: 0.40}
+    gpt-4o-mini: {input_per_m: 0.15, output_per_m: 0.60}
+
+# --- Experiment ---
+experiment:
+  seed: 42
+  output_dir: "results"
+  log_level: "INFO"

@@ -1,0 +1,16 @@
+# =============================================================================
+# Smoke-test overrides: tiny search budget so an end-to-end run finishes in
+# minutes on the free tier (15 RPM). Usage:
+#   python scripts/run_attack.py --config config/smoke.yaml --dataset custom --max-samples 3
+# =============================================================================
+target_model:
+  num_samples: 3            # 3 samples per candidate instead of 5
+
+evolution:
+  population_size: 4        # candidates per generation (default 10)
+  num_generations: 3        # default 20
+  elite_count: 1
+
+baselines:
+  num_naive_paraphrases: 2  # default 5
+  num_samples_per_paraphrase: 3

@@ -1,0 +1,49 @@
+[project]
+name = "framing-attack"
+version = "0.1.0"
+description = "Black-box LLM framing attack via semantically-equivalent paraphrasing"
+requires-python = ">=3.10"
+dependencies = [
+    # LLM API clients
+    "google-genai>=1.0.0",          # Google Gemini API (official SDK)
+    "groq>=0.4.0",                   # Groq API client
+    # Data
+    "datasets>=2.18.0",             # HuggingFace datasets (TriviaQA etc.)
+    # Config & utilities
+    "pyyaml>=6.0",                  # YAML config
+    "python-dotenv>=1.0.0",         # .env loading
+    "pydantic>=2.0",                # Config validation
+    "pydantic-settings>=2.0",       # Settings from env
+    # Experiment tracking
+    "tqdm>=4.65.0",                 # Progress bars
+    "rich>=13.0.0",                 # Rich console output
+]
+
+[project.optional-dependencies]
+# Local NLI cross-encoder (first validator stage). Heavy; skip on low-resource machines
+# and set equivalence.nli_model: null in the config instead.
+nli = [
+    "transformers>=4.40.0",
+    "torch>=2.0.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

@@ -1,0 +1,162 @@
+[
+  {
+    "id": "recency_001",
+    "question": "Who won the 2024 US presidential election?",
+    "answer": "Donald Trump",
+    "aliases": ["Trump", "Donald J. Trump"],
+    "category": "politics",
+    "year": 2024
+  },
+  {
+    "id": "recency_002",
+    "question": "Which country hosted the 2024 Summer Olympics?",
+    "answer": "France",
+    "aliases": ["Paris", "Paris, France"],
+    "category": "sports",
+    "year": 2024
+  },
+  {
+    "id": "recency_003",
+    "question": "Who won the 2024 UEFA European Football Championship?",
+    "answer": "Spain",
+    "aliases": ["Spain national football team"],
+    "category": "sports",
+    "year": 2024
+  },
+  {
+    "id": "recency_004",
+    "question": "Which film won the Academy Award for Best Picture at the 2024 Oscars ceremony?",
+    "answer": "Oppenheimer",
+    "aliases": [],
+    "category": "entertainment",
+    "year": 2024
+  },
+  {
+    "id": "recency_005",
+    "question": "Who won the 2024 Formula 1 World Drivers' Championship?",
+    "answer": "Max Verstappen",
+    "aliases": ["Verstappen"],
+    "category": "sports",
+    "year": 2024
+  },
+  {
+    "id": "recency_006",
+    "question": "What is the capital of Myanmar?",
+    "answer": "Naypyidaw",
+    "aliases": ["Nay Pyi Taw"],
+    "category": "geography",
+    "year": null
+  },
+  {
+    "id": "recency_007",
+    "question": "Who is the current Secretary-General of the United Nations?",
+    "answer": "António Guterres",
+    "aliases": ["Guterres", "Antonio Guterres"],
+    "category": "politics",
+    "year": 2024
+  },
+  {
+    "id": "recency_008",
+    "question": "What is the largest country in Africa by area?",
+    "answer": "Algeria",
+    "aliases": [],
+    "category": "geography",
+    "year": null
+  },
+  {
+    "id": "recency_009",
+    "question": "Who wrote the novel 'One Hundred Years of Solitude'?",
+    "answer": "Gabriel García Márquez",
+    "aliases": ["Garcia Marquez", "Gabriel Garcia Marquez", "Márquez"],
+    "category": "literature",
+    "year": null
+  },
+  {
+    "id": "recency_010",
+    "question": "What element has the atomic number 79?",
+    "answer": "Gold",
+    "aliases": ["Au"],
+    "category": "science",
+    "year": null
+  },
+  {
+    "id": "recency_011",
+    "question": "Which planet in our solar system has the most moons?",
+    "answer": "Saturn",
+    "aliases": [],
+    "category": "science",
+    "year": 2024
+  },
+  {
+    "id": "recency_012",
+    "question": "Who won the Nobel Prize in Literature in 2024?",
+    "answer": "Han Kang",
+    "aliases": ["Kang"],
+    "category": "literature",
+    "year": 2024
+  },
+  {
+    "id": "recency_013",
+    "question": "What is the tallest building in the world as of 2024?",
+    "answer": "Burj Khalifa",
+    "aliases": ["Burj Dubai"],
+    "category": "architecture",
+    "year": 2024
+  },
+  {
+    "id": "recency_014",
+    "question": "Which team won the 2024 Super Bowl?",
+    "answer": "Kansas City Chiefs",
+    "aliases": ["Chiefs", "KC Chiefs"],
+    "category": "sports",
+    "year": 2024
+  },
+  {
+    "id": "recency_015",
+    "question": "Who painted the Sistine Chapel ceiling?",
+    "answer": "Michelangelo",
+    "aliases": ["Michelangelo di Lodovico Buonarroti Simoni", "Michelangelo Buonarroti"],
+    "category": "art",
+    "year": null
+  },
+  {
+    "id": "recency_016",
+    "question": "What is the chemical formula for table salt?",
+    "answer": "NaCl",
+    "aliases": ["Sodium chloride"],
+    "category": "science",
+    "year": null
+  },
+  {
+    "id": "recency_017",
+    "question": "Which country has the largest population in the world?",
+    "answer": "India",
+    "aliases": [],
+    "category": "geography",
+    "year": 2024
+  },
+  {
+    "id": "recency_018",
+    "question": "What year did the Berlin Wall fall?",
+    "answer": "1989",
+    "aliases": [],
+    "category": "history",
+    "year": null
+  },
+  {
+    "id": "recency_019",
+    "question": "Who discovered penicillin?",
+    "answer": "Alexander Fleming",
+    "aliases": ["Fleming"],
+    "category": "science",
+    "year": null
+  },
+  {
+    "id": "recency_020",
+    "question": "What is the longest river in the world?",
+    "answer": "Nile",
+    "aliases": ["River Nile", "The Nile"],
+    "category": "geography",
+    "year": null
+  }
+]
