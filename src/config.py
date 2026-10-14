@@ -35,6 +35,7 @@ class ModelConfig(BaseModel):
     num_samples: int = 5
     requests_per_minute: Optional[float] = 15  # Free-tier Gemini limit; None disables pacing
     concurrency: int = 1  # Parallel requests for sample()/generate_batch()
+    reasoning_effort: Optional[str] = None  # Groq reasoning models (gpt-oss): low/medium/high
 
 
 class LLMJudgeConfig(BaseModel):

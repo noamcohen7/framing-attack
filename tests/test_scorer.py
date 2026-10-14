@@ -76,3 +76,34 @@ class TestAbstentionPolicy:
     def test_unknown_policy_rejected(self):
         with pytest.raises(ValueError):
             _scorer("bogus")
+
+
+class TestKnowsAnswer:
+    """Attackability must not treat all-abstain as correct."""
+
+    def _result(self, correct, abstained, total=4):
+        from src.evaluation.scorer import ScoreResult
+        return ScoreResult(
+            paraphrase="q", wrongness_score=0.0, num_samples=total,
+            num_correct=correct, num_incorrect=total - correct, num_abstained=abstained,
+        )
+
+    def test_all_abstain_is_not_known(self):
+        r = self._result(correct=0, abstained=4)
+        assert r.accuracy == 0.0 and not r.knows_answer
+
+    def test_majority_correct_is_known(self):
+        assert self._result(correct=3, abstained=1).knows_answer
+
+    def test_half_correct_is_not_known(self):
+        assert not self._result(correct=2, abstained=2).knows_answer
+
+    def test_all_abstain_scores_zero_wrongness_under_exclude(self):
+        scorer = WrongnessScorer(
+            target_llm=ScriptedLLM(["I don't know."] * 3),
+            answer_extractor=AnswerExtractor(method="regex"),
+            num_samples=3, abstention_policy="exclude",
+        )
+        r = scorer.score_original(QA)
+        assert r.wrongness_score == 0.0      # why wrongness alone can't gate attacks
+        assert not r.knows_answer

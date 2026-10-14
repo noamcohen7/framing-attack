@@ -1,6 +1,6 @@
 # Handoff for the next Claude Code session
 
-Read this file first. It is the complete state of the project as of 2026-10-12.
+Read this file first. It is the complete state of the project as of 2026-10-14.
 The research plan is in `docs/intermediate_report.pdf` (Noam Cohen, TAU):
 a black-box attack that finds meaning-preserving rephrasings of factual
 questions that make an LLM answer wrongly. Four phases: 0 setup/baselines,
@@ -13,8 +13,9 @@ questions that make an LLM answer wrongly. Four phases: 0 setup/baselines,
   install torch.
 - **Three different models, one per role**, all via APIs:
   - Target (attacked): a weak open model so flips are plentiful ->
-    `llama-3.1-8b-instant` on Groq.
-  - Auxiliary (paraphraser + answer extraction): `llama-3.3-70b-versatile` on Groq.
+    `openai/gpt-oss-20b` on Groq (reasoning_effort low).
+  - Auxiliary (paraphraser + answer extraction): `openai/gpt-oss-120b` on Groq.
+  (Groq retired llama-3.1-8b-instant and llama-3.3-70b-versatile by 2026-10.)
   - Judge (equivalence guard): `gemini-3.5-flash-lite` on Gemini (independent vendor).
   This is `config/three-model.yaml`. Verify model names with each provider's
   list-models call before the first run; names rotate.
@@ -36,6 +37,31 @@ cp .env.example .env                # add GROQ_API_KEY and GEMINI_API_KEY
 Keys: Groq from https://console.groq.com/keys (starts `gsk_`); Gemini from
 https://aistudio.google.com/apikey (starts `AIza` or `AQ.`). Keys live only
 in `.env`, which is git-ignored.
+
+## Session 2026-10-14: what changed
+
+- Groq models swapped to gpt-oss-20b / gpt-oss-120b; new `reasoning_effort`
+  field in model config (passed to Groq). `config/three-model-smoke.yaml` =
+  three-model + small search, for live checks.
+- Groq client now uses truststore (corporate TLS proxy on this machine).
+- BUG FIXED: under `abstention_policy: exclude` a question the model always
+  refuses has wrongness 0.0, so it was treated as "known" and attacked, and
+  any wrong guess counted as a flip. Attackability now uses
+  `ScoreResult.knows_answer` (correct in >50% of ALL samples), in both the
+  attack skip and the baseline "attackable" count.
+- TriviaQA: loads the 7 MB `rc.nocontext` parquet instead of multi-GB `rc`.
+  Filter drops numeric/date and list answers (~6%) and strips unrelated
+  Wikipedia-redirect aliases (avg 15.6 -> 4.6 aliases).
+- Naive paraphrases: one prompt for N numbered rewrites + near-dup removal.
+- Recency set: 50 items. Post-cutoff items tagged `after_target_cutoff`
+  and sorted last; time-sensitive ones carry `verified_as_of` (UN SG item
+  has `valid_until: 2026-12-31`).
+- Attack results now save `rejected_candidates` (with judge reason).
+  `scripts/calibrate_validator.py sample|score` builds the blind human
+  labeling CSV and reports judge precision / population-weighted recall.
+- Smoke attack, 10 custom questions: 7 attacked, 2 "flips", both noise
+  (borderline/post-cutoff questions, mild rewrites); 5 timeless questions
+  best score 0.00 after 3 generations. 986 requests, ~$0.05.
 
 ## What is verified working
 
@@ -63,18 +89,14 @@ one), either enable Groq's paid tier or move the auxiliary to OpenAI
 ## Remaining work, in order
 
 1. **Phase 0 gaps**
-   - `src/data/loader.py::_load_triviaqa`: the "single canonical answer"
-     filter is a stub (`pass`). Implement it (e.g. keep items whose aliases
-     are surface variants of the canonical answer; drop numeric/date
-     ambiguity) and add a test with a few hand-written rows.
-   - `src/data/recency_facts.json`: 20 items. Expand to 40-50 and re-verify
-     every time-sensitive one as of today (UN Secretary-General, largest
-     population, tallest building, "current" anything).
-   - Naive-paraphrase baseline produces near-duplicates at temperature 0.9.
-     Add dedup and ask for N distinct rewrites in one prompt.
-   - Validator calibration: sample ~200 (original, paraphrase) pairs from a
-     run, have a human label them, report judge precision/recall. The
-     paper promises this.
+   - DONE 2026-10-14: TriviaQA filter, recency set (50), naive-paraphrase
+     dedup, calibration tooling.
+   - Validator calibration still needs the HUMAN labels: after a run with
+     rejected-candidate logging, `calibrate_validator.py sample --n 200`,
+     label `results/calibration/pairs.csv`, then `score`.
+   - Native accuracy with 3 samples is noisy: borderline questions pass the
+     attackability gate and then "flip" on trivial rewrites. Consider
+     num_samples 5+ for the gate, or requiring native accuracy >= 0.8.
 2. **Phase 1 full run**
    - Pick budget: 100-200 TriviaQA questions + the recency set, default
      search config (`population_size 10`, `num_generations 20`). Raise

@@ -19,6 +19,7 @@ def create_llm(
     max_tokens: int = 256,
     requests_per_minute: float | None = None,
     concurrency: int = 1,
+    reasoning_effort: str | None = None,
 ) -> BaseLLM:
     """
     Factory function to create an LLM client by provider name.
@@ -47,11 +48,12 @@ def create_llm(
         from src.models.groq_client import GroqLLM
 
         return GroqLLM(
-            model_name=model_name or "llama-3.3-70b-versatile",
+            model_name=model_name or "openai/gpt-oss-120b",
             temperature=temperature,
             max_tokens=max_tokens,
             requests_per_minute=requests_per_minute,
             concurrency=concurrency,
+            reasoning_effort=reasoning_effort,
         )
     elif provider in ("openai", "openrouter"):
         from src.models.openai_compat import OpenAICompatLLM
@@ -79,6 +81,7 @@ def create_llm_from_config(config: ModelConfig) -> BaseLLM:
         max_tokens=config.max_tokens,
         requests_per_minute=config.requests_per_minute,
         concurrency=config.concurrency,
+        reasoning_effort=config.reasoning_effort,
     )
 
 

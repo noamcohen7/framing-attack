@@ -42,6 +42,9 @@ class EvolutionResult:
     qa_item: QAItem
     best_candidate: Optional[Candidate] = None
     all_candidates: list[Candidate] = field(default_factory=list)
+    # Candidates the equivalence validator rejected: {paraphrase, generation, reason}.
+    # Kept for validator calibration (recall needs the rejected side too).
+    rejected_candidates: list[dict] = field(default_factory=list)
     generations_run: int = 0
     total_candidates_generated: int = 0
     total_candidates_valid: int = 0      # Passed equivalence check
@@ -208,13 +211,18 @@ class EvolutionarySearch:
 
         for paraphrase in candidates:
             # Deduplicate
-            if any(c.paraphrase == paraphrase for c in result.all_candidates):
+            if any(c.paraphrase == paraphrase for c in result.all_candidates) or any(
+                r["paraphrase"] == paraphrase for r in result.rejected_candidates
+            ):
                 continue
 
             # Equivalence check
             eq_result = self.validator.validate(qa_item.question, paraphrase)
             if not eq_result.is_equivalent:
                 logger.debug(f"Rejected: {paraphrase[:60]}... ({eq_result.reason})")
+                result.rejected_candidates.append(
+                    {"paraphrase": paraphrase, "generation": generation, "reason": eq_result.reason}
+                )
                 continue
 
             result.total_candidates_valid += 1

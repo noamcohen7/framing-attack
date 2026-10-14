@@ -37,6 +37,20 @@ class ScoreResult:
     def abstention_rate(self) -> float:
         return self.num_abstained / self.num_samples if self.num_samples else 0.0
 
+    @property
+    def accuracy(self) -> float:
+        """Fraction of ALL samples answered correctly (abstentions count against)."""
+        return self.num_correct / self.num_samples if self.num_samples else 0.0
+
+    @property
+    def knows_answer(self) -> bool:
+        """
+        True if the model answers correctly in most samples: the precondition
+        for attacking a question. Not `wrongness_score <= 0.5`, which under
+        abstention_policy='exclude' is 0.0 when every sample abstains.
+        """
+        return self.accuracy > 0.5
+
 
 class WrongnessScorer:
     """

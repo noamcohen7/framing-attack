@@ -198,10 +198,11 @@ class AttackPipeline:
                 except BudgetExceededError as e:
                     logger.error(f"Stopping attack: {e}")
                     break
-                if baseline.wrongness_score > 0.5:
+                if not baseline.knows_answer:
                     logger.info(
-                        f"Skipping {qa_item.id}: model already wrong "
-                        f"(score={baseline.wrongness_score:.2f})"
+                        f"Skipping {qa_item.id}: model does not reliably answer correctly "
+                        f"(accuracy={baseline.accuracy:.2f}, "
+                        f"abstained={baseline.num_abstained}/{baseline.num_samples})"
                     )
                     continue
 
@@ -309,6 +310,7 @@ class AttackPipeline:
                     self._candidate_to_dict(c)
                     for c in sorted(r.all_candidates, key=lambda c: c.score, reverse=True)
                 ],
+                "rejected_candidates": r.rejected_candidates,
             }
             data.append(entry)
 

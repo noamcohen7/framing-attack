@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -29,6 +31,9 @@ class QAItem:
     aliases: list[str] = field(default_factory=list)
     category: Optional[str] = None
     source: str = "unknown"
+    # Event postdates the target model's training data (~mid-2024 for
+    # gpt-oss-20b): expected unanswerable, kept for the abstention analysis.
+    after_target_cutoff: bool = False
 
     @property
     def all_valid_answers(self) -> list[str]:
@@ -87,8 +92,21 @@ def _load_triviaqa(
     except ImportError:
         raise ImportError("Install 'datasets' package: pip install datasets")
 
+    try:
+        import truststore  # corporate TLS proxies: trust the system cert store
+        truststore.inject_into_ssl()
+    except ImportError:
+        pass
+
+    # rc.nocontext: same questions/answers as 'rc' without the evidence
+    # documents (validation is ~7 MB instead of several GB). Load one split's
+    # parquet file so the other splits are not downloaded.
     logger.info(f"Loading TriviaQA split='{split}'...")
-    ds = hf_load("trivia_qa", "rc", split=split)
+    ds = hf_load(
+        "mandarjoshi/trivia_qa",
+        data_files={split: f"rc.nocontext/{split}-00000-of-00001.parquet"},
+        split=split,
+    )
 
     # Shuffle deterministically
     ds = ds.shuffle(seed=seed)
@@ -103,11 +121,10 @@ def _load_triviaqa(
         if not canonical:
             continue
 
-        # Filter: only single-answer questions
         if filter_single_answer:
-            # Skip items with very different aliases (suggests ambiguity)
-            # Keep items where aliases are surface variations of the canonical answer
-            pass  # TriviaQA aliases are generally surface variants; keep all
+            if not is_single_canonical_answer(canonical):
+                continue
+            aliases = surface_variant_aliases(canonical, aliases)
 
         items.append(
             QAItem(
@@ -121,6 +138,56 @@ def _load_triviaqa(
 
     logger.info(f"TriviaQA: loaded {len(items)} items")
     return items
+
+
+_STOPWORDS = {"the", "a", "an", "of", "and", "in", "on", "de", "la", "le", "von", "van"}
+_MULTI_ANSWER = re.compile(r"\s(and|or)\s|&|/|;|,", re.IGNORECASE)
+
+
+def _content_tokens(text: str) -> set[str]:
+    folded = unicodedata.normalize("NFKD", text.lower())
+    folded = "".join(c for c in folded if not unicodedata.combining(c))
+    words = re.findall(r"[^\W_]+", folded)
+    return {w for w in words if w not in _STOPWORDS}
+
+
+def is_single_canonical_answer(canonical: str) -> bool:
+    """
+    True if a TriviaQA answer is one entity we can match reliably.
+
+    Rejects:
+      - numeric / date answers ("1989", "12 June 1815", "8%"): surface forms
+        vary too much for fuzzy matching ("nineteen eighty-four").
+      - list or choice answers ("Lennon and McCartney", "Oxford/Cambridge").
+    """
+    if not canonical.strip() or re.search(r"\d", canonical):
+        return False
+    if _MULTI_ANSWER.search(canonical):
+        return False
+    return bool(_content_tokens(canonical))
+
+
+def surface_variant_aliases(canonical: str, aliases: list[str]) -> list[str]:
+    """
+    Keep only aliases that are surface variants of the canonical answer: the
+    alias's content words contain all of the canonical's ("US President Bill
+    Clinton") or are a subset of them ("Beatles", "García Márquez").
+
+    TriviaQA aliases are Wikipedia redirects and include unrelated pages
+    ("Buddy (Clinton's dog)" for Bill Clinton, film titles for an actor).
+    Those would let a wrong answer match as correct, so drop them.
+    """
+    canon_tokens = _content_tokens(canonical)
+    kept: list[str] = []
+    seen = {canonical.strip().lower()}
+    for alias in aliases:
+        key = alias.strip().lower()
+        alias_tokens = _content_tokens(alias)
+        is_variant = alias_tokens and (canon_tokens <= alias_tokens or alias_tokens <= canon_tokens)
+        if key and key not in seen and is_variant:
+            kept.append(alias)
+            seen.add(key)
+    return kept
 
 
 def _load_custom_facts() -> list[QAItem]:
@@ -141,9 +208,12 @@ def _load_custom_facts() -> list[QAItem]:
             aliases=item.get("aliases", []),
             category=item.get("category"),
             source="custom",
+            after_target_cutoff=item.get("after_target_cutoff", False),
         )
         for item in raw
     ]
+    # Post-cutoff items last, so --max-samples picks attackable questions first.
+    items.sort(key=lambda it: it.after_target_cutoff)
 
     logger.info(f"Custom facts: loaded {len(items)} items")
     return items

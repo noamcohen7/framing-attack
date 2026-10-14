@@ -1,32 +1,37 @@
 # =============================================================================
 # Three-model setup with NO local models (works on a low-resource machine).
 #
-#   Target    : Llama 3.1 8B on Groq   (weak open model; flips more easily)
-#   Auxiliary : Llama 3.3 70B on Groq  (paraphrases + answer extraction)
+#   Target    : gpt-oss-20b on Groq    (weak open model; flips more easily)
+#   Auxiliary : gpt-oss-120b on Groq   (paraphrases + answer extraction)
 #   Judge     : Gemini 3.5 Flash-Lite  (independent vendor for the honesty guard)
 #   NLI       : disabled               (judge-only equivalence; no torch needed)
 #
 # Keys needed in .env: GROQ_API_KEY, GEMINI_API_KEY
 # Free-tier pacing below (Groq ~30 RPM, Gemini 15 RPM). On paid tiers set
 # requests_per_minute: null and concurrency: 8.
+# gpt-oss are reasoning models: reasoning_effort low, and max_tokens leaves
+# headroom because reasoning tokens count against it.
+# (Groq retired llama-3.1-8b-instant and llama-3.3-70b-versatile.)
 #
 #   python scripts/run_baselines.py --config config/three-model.yaml --dataset custom --max-samples 3
 #   python scripts/run_attack.py    --config config/three-model.yaml --dataset custom --max-samples 3
 # =============================================================================
 target_model:
   provider: "groq"
-  model_name: "llama-3.1-8b-instant"
+  model_name: "openai/gpt-oss-20b"
   temperature: 0.0
-  max_tokens: 256
+  max_tokens: 512
+  reasoning_effort: "low"
   num_samples: 5
   requests_per_minute: 28
   concurrency: 1
 
 auxiliary_model:
   provider: "groq"
-  model_name: "llama-3.3-70b-versatile"
+  model_name: "openai/gpt-oss-120b"
   temperature: 0.9
-  max_tokens: 512
+  max_tokens: 1024
+  reasoning_effort: "low"
   requests_per_minute: 28
   concurrency: 1
 
@@ -43,6 +48,6 @@ budget:
   max_requests: 3000
   max_usd: 2.0
   prices:
-    llama-3.1-8b-instant:    {input_per_m: 0.05, output_per_m: 0.08}
-    llama-3.3-70b-versatile: {input_per_m: 0.59, output_per_m: 0.79}
+    openai/gpt-oss-20b:      {input_per_m: 0.075, output_per_m: 0.30}
+    openai/gpt-oss-120b:     {input_per_m: 0.15, output_per_m: 0.60}
     gemini-3.5-flash-lite:   {input_per_m: 0.30, output_per_m: 2.50}

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+from difflib import SequenceMatcher
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
@@ -27,11 +29,47 @@ from src.evaluation.answer_extract import AnswerExtractor
 
 logger = logging.getLogger(__name__)
 
-NAIVE_PARAPHRASE_PROMPT = """Rewrite the following question in a different way while preserving its exact meaning. The rewrite should ask for the same factual information. Just output the rewritten question, nothing else.
+NAIVE_PARAPHRASE_PROMPT = """Rewrite the following question {n} different ways while preserving its exact meaning. Each rewrite must ask for the same factual information. Make the rewrites clearly different from each other in wording and structure, not just one or two swapped words.{avoid}
 
-Original question: {question}
+Output exactly {n} rewrites, one per line, numbered "1.", "2.", and so on. Output nothing else.
 
-Rewritten question:"""
+Original question: {question}"""
+
+_AVOID_CLAUSE = "\n\nDo not repeat any of these existing rewrites:\n{existing}"
+
+# Normalized-text similarity above which two rewrites count as duplicates.
+_DUPLICATE_SIMILARITY = 0.9
+
+
+def _normalize_question(text: str) -> str:
+    return re.sub(r"[^a-z0-9 ]", "", re.sub(r"\s+", " ", text.lower())).strip()
+
+
+def parse_numbered_rewrites(text: str) -> list[str]:
+    """Pull rewrites out of a numbered list ("1. ...", "2) ...")."""
+    rewrites = []
+    for line in text.splitlines():
+        match = re.match(r"^\s*\d+\s*[.):]\s*(.+)$", line)
+        if match:
+            rewrite = match.group(1).strip().strip('"').strip()
+            if rewrite:
+                rewrites.append(rewrite)
+    return rewrites
+
+
+def dedupe_rewrites(original: str, candidates: list[str], existing: list[str] = ()) -> list[str]:
+    """Drop rewrites that are near-duplicates of the original, `existing`, or each other."""
+    kept: list[str] = []
+    seen = [_normalize_question(original)] + [_normalize_question(e) for e in existing]
+    for cand in candidates:
+        norm = _normalize_question(cand)
+        if not norm:
+            continue
+        if any(SequenceMatcher(None, norm, s).ratio() >= _DUPLICATE_SIMILARITY for s in seen):
+            continue
+        kept.append(cand)
+        seen.append(norm)
+    return kept
 
 
 @dataclass
@@ -100,15 +138,28 @@ class BaselineMeasurer:
         self.scorer = scorer
         self.num_naive_paraphrases = num_naive_paraphrases
 
-    def generate_naive_paraphrases(self, question: str, n: int) -> list[str]:
-        """Generate random paraphrases using the auxiliary LLM."""
-        paraphrases = []
-        for _ in range(n):
-            prompt = NAIVE_PARAPHRASE_PROMPT.format(question=question)
+    def generate_naive_paraphrases(self, question: str, n: int, max_calls: int = 2) -> list[str]:
+        """
+        Generate up to n distinct paraphrases using the auxiliary LLM.
+
+        Asks for all n in one prompt (separate calls at temperature 0.9 mostly
+        returned the same rewrite), drops near-duplicates, and makes one
+        follow-up call for the shortfall.
+        """
+        paraphrases: list[str] = []
+        for _ in range(max_calls):
+            missing = n - len(paraphrases)
+            if missing <= 0:
+                break
+            avoid = ""
+            if paraphrases:
+                avoid = _AVOID_CLAUSE.format(existing="\n".join(f"- {p}" for p in paraphrases))
+            prompt = NAIVE_PARAPHRASE_PROMPT.format(n=missing, question=question, avoid=avoid)
             response = self.auxiliary_llm.generate(prompt, temperature=0.9)
-            paraphrase = response.text.strip().strip('"')
-            if paraphrase:
-                paraphrases.append(paraphrase)
+            new = dedupe_rewrites(question, parse_numbered_rewrites(response.text), paraphrases)
+            paraphrases.extend(new[:missing])
+        if len(paraphrases) < n:
+            logger.warning(f"Only {len(paraphrases)}/{n} distinct naive paraphrases for: {question[:60]}")
         return paraphrases
 
     def measure_single(self, qa_item: QAItem) -> BaselineResult:
@@ -182,8 +233,11 @@ class BaselineMeasurer:
         naive_avg_rates = [r.naive_avg_error_rate for r in results]
         naive_max_rates = [r.naive_max_error_rate for r in results]
 
-        num_already_wrong = sum(1 for r in native_rates if r > 0.5)
-        num_attackable = len(results) - num_already_wrong
+        # Attackable = model answers correctly in most native samples. A question
+        # it always refuses has native_error_rate 0.0 under 'exclude' but is not
+        # attackable; count it with the already-wrong ones.
+        num_attackable = sum(1 for r in results if r.native_score and r.native_score.knows_answer)
+        num_already_wrong = len(results) - num_attackable
 
         return AggregateBaseline(
             num_questions=len(results),
