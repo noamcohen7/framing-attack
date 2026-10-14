@@ -67,6 +67,9 @@ class EvolutionConfig(BaseModel):
     crossover_rate: float = 0.2
     elite_count: int = 2
     early_stop_score: float = 1.0
+    # Attack a question only if the model answers it correctly in at least this
+    # fraction of native samples (abstentions count against). 0.8 = 4 of 5.
+    min_native_accuracy: float = 0.8
 
 
 class AnswerExtractionConfig(BaseModel):

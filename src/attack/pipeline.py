@@ -155,6 +155,7 @@ class AttackPipeline:
             auxiliary_llm=self.auxiliary_llm,
             scorer=self.scorer,
             num_naive_paraphrases=self.config.baselines.num_naive_paraphrases,
+            min_native_accuracy=self.config.evolution.min_native_accuracy,
         )
 
         results, aggregate = measurer.measure_all(qa_items, output_path=output_path)
@@ -198,7 +199,7 @@ class AttackPipeline:
                 except BudgetExceededError as e:
                     logger.error(f"Stopping attack: {e}")
                     break
-                if not baseline.knows_answer:
+                if not baseline.knows_answer(self.config.evolution.min_native_accuracy):
                     logger.info(
                         f"Skipping {qa_item.id}: model does not reliably answer correctly "
                         f"(accuracy={baseline.accuracy:.2f}, "

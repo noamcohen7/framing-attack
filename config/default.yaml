@@ -50,6 +50,7 @@ evolution:
   crossover_rate: 0.2               # Fraction to recombine
   elite_count: 2                    # Top candidates preserved unchanged
   early_stop_score: 1.0             # Stop if we achieve perfect wrongness
+  min_native_accuracy: 0.8          # Attack only if native correct in >= 80% of samples (4/5)
 
 # --- Answer extraction ---
 answer_extraction:

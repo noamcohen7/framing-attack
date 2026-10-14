@@ -79,9 +79,9 @@ class TestAbstentionPolicy:
 
 
 class TestKnowsAnswer:
-    """Attackability must not treat all-abstain as correct."""
+    """Attackability: correct in >= min_accuracy of ALL samples; all-abstain is not known."""
 
-    def _result(self, correct, abstained, total=4):
+    def _result(self, correct, abstained, total=5):
         from src.evaluation.scorer import ScoreResult
         return ScoreResult(
             paraphrase="q", wrongness_score=0.0, num_samples=total,
@@ -89,14 +89,20 @@ class TestKnowsAnswer:
         )
 
     def test_all_abstain_is_not_known(self):
-        r = self._result(correct=0, abstained=4)
-        assert r.accuracy == 0.0 and not r.knows_answer
+        r = self._result(correct=0, abstained=5)
+        assert r.accuracy == 0.0 and not r.knows_answer()
 
-    def test_majority_correct_is_known(self):
-        assert self._result(correct=3, abstained=1).knows_answer
+    def test_four_of_five_is_known(self):
+        assert self._result(correct=4, abstained=1).knows_answer()
 
-    def test_half_correct_is_not_known(self):
-        assert not self._result(correct=2, abstained=2).knows_answer
+    def test_three_of_five_is_not_known(self):
+        assert not self._result(correct=3, abstained=0).knows_answer()
+
+    def test_threshold_is_configurable(self):
+        assert self._result(correct=3, abstained=0).knows_answer(min_accuracy=0.6)
+
+    def test_zero_samples_is_not_known(self):
+        assert not self._result(correct=0, abstained=0, total=0).knows_answer(min_accuracy=0.0)
 
     def test_all_abstain_scores_zero_wrongness_under_exclude(self):
         scorer = WrongnessScorer(
@@ -106,4 +112,4 @@ class TestKnowsAnswer:
         )
         r = scorer.score_original(QA)
         assert r.wrongness_score == 0.0      # why wrongness alone can't gate attacks
-        assert not r.knows_answer
+        assert not r.knows_answer()

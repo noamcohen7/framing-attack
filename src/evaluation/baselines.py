@@ -132,11 +132,13 @@ class BaselineMeasurer:
         auxiliary_llm: BaseLLM,
         scorer: WrongnessScorer,
         num_naive_paraphrases: int = 5,
+        min_native_accuracy: float = 0.8,
     ):
         self.target_llm = target_llm
         self.auxiliary_llm = auxiliary_llm
         self.scorer = scorer
         self.num_naive_paraphrases = num_naive_paraphrases
+        self.min_native_accuracy = min_native_accuracy
 
     def generate_naive_paraphrases(self, question: str, n: int, max_calls: int = 2) -> list[str]:
         """
@@ -215,7 +217,7 @@ class BaselineMeasurer:
             results.append(result)
 
         # Aggregate
-        agg = self._aggregate(results)
+        agg = self._aggregate(results, self.min_native_accuracy)
 
         # Save if requested
         if output_path is not None:
@@ -224,7 +226,7 @@ class BaselineMeasurer:
         return results, agg
 
     @staticmethod
-    def _aggregate(results: list[BaselineResult]) -> AggregateBaseline:
+    def _aggregate(results: list[BaselineResult], min_native_accuracy: float = 0.8) -> AggregateBaseline:
         """Compute aggregate statistics."""
         if not results:
             return AggregateBaseline()
@@ -236,7 +238,10 @@ class BaselineMeasurer:
         # Attackable = model answers correctly in most native samples. A question
         # it always refuses has native_error_rate 0.0 under 'exclude' but is not
         # attackable; count it with the already-wrong ones.
-        num_attackable = sum(1 for r in results if r.native_score and r.native_score.knows_answer)
+        num_attackable = sum(
+            1 for r in results
+            if r.native_score and r.native_score.knows_answer(min_native_accuracy)
+        )
         num_already_wrong = len(results) - num_attackable
 
         return AggregateBaseline(

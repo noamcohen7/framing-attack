@@ -42,14 +42,15 @@ class ScoreResult:
         """Fraction of ALL samples answered correctly (abstentions count against)."""
         return self.num_correct / self.num_samples if self.num_samples else 0.0
 
-    @property
-    def knows_answer(self) -> bool:
+    def knows_answer(self, min_accuracy: float = 0.8) -> bool:
         """
-        True if the model answers correctly in most samples: the precondition
-        for attacking a question. Not `wrongness_score <= 0.5`, which under
-        abstention_policy='exclude' is 0.0 when every sample abstains.
+        True if the model answers correctly in at least `min_accuracy` of ALL
+        samples: the precondition for attacking a question. Not based on
+        `wrongness_score`, which under abstention_policy='exclude' is 0.0 when
+        every sample abstains. The default 0.8 (4 of 5) keeps out questions the
+        model gets right only by luck, which otherwise "flip" on noise.
         """
-        return self.accuracy > 0.5
+        return self.num_samples > 0 and self.accuracy >= min_accuracy - 1e-9
 
 
 class WrongnessScorer:
