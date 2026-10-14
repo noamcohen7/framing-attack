@@ -134,3 +134,26 @@ class TestClientSidePacing:
         llm.generate("a")
         llm.generate("b")
         assert fake_clock["sleeps"] == []
+
+
+def test_permanent_client_errors_are_not_retried():
+    import httpx
+    import pytest
+    from src.models.base import BaseLLM
+
+    calls = []
+
+    class PaymentRequired(BaseLLM):
+        @property
+        def provider_name(self):
+            return "fake"
+
+        def _generate(self, prompt, temperature=None):
+            calls.append(1)
+            req = httpx.Request("POST", "https://x")
+            raise httpx.HTTPStatusError("402 Payment Required", request=req,
+                                        response=httpx.Response(402, request=req))
+
+    with pytest.raises(httpx.HTTPStatusError):
+        PaymentRequired(model_name="m", requests_per_minute=None).generate("q", backoff=0.0)
+    assert len(calls) == 1

@@ -57,6 +57,22 @@ def _is_rate_limit_error(error: Exception) -> bool:
     return "429" in text or "RESOURCE_EXHAUSTED" in text or "rate limit" in text.lower()
 
 
+# Client errors that retrying cannot fix: bad request, auth, payment, not found.
+_PERMANENT_STATUS = {400, 401, 402, 403, 404, 422}
+
+
+def _status_code(error: Exception) -> Optional[int]:
+    code = getattr(error, "code", None) or getattr(error, "status_code", None)
+    if code is None:
+        response = getattr(error, "response", None)
+        code = getattr(response, "status_code", None)
+    return code if isinstance(code, int) else None
+
+
+def _is_permanent_error(error: Exception) -> bool:
+    return _status_code(error) in _PERMANENT_STATUS
+
+
 class _RateLimiter:
     """Minimum-interval limiter shared by every client of one model."""
 
@@ -206,6 +222,9 @@ class BaseLLM(ABC):
                     time.sleep(wait)
                     continue
 
+                if _is_permanent_error(error=e):
+                    logger.error(f"[{self.provider_name}] Not retrying: {e}")
+                    break
                 if transient_attempt >= retries:
                     logger.error(
                         f"[{self.provider_name}] All {retries + 1} attempts failed."
