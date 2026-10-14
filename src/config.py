@@ -70,6 +70,10 @@ class EvolutionConfig(BaseModel):
     # Attack a question only if the model answers it correctly in at least this
     # fraction of native samples (abstentions count against). 0.8 = 4 of 5.
     min_native_accuracy: float = 0.8
+    # Re-score a would-be winning rephrasing with this many FRESH samples; it
+    # counts as a flip only if still majority-wrong. Removes the best-of-many
+    # selection bias of picking the luckiest of ~170 noisy scores. 0 disables.
+    confirm_samples: int = 10
 
 
 class AnswerExtractionConfig(BaseModel):
@@ -85,10 +89,12 @@ class BaselinesConfig(BaseModel):
 
 
 class BudgetConfig(BaseModel):
-    """Hard per-run ceiling. Either cap None = unlimited."""
+    """Hard ceilings. Any cap None = unlimited."""
 
-    max_requests: Optional[int] = 3000
-    max_usd: Optional[float] = 2.0
+    max_requests: Optional[int] = 3000      # per run
+    max_usd: Optional[float] = 2.0          # per run
+    max_usd_total: Optional[float] = None   # across all runs sharing ledger_path
+    ledger_path: Optional[str] = None       # None = <experiment.output_dir>/spend_ledger.json
     # USD per million tokens, used to estimate cost when the API does not report it.
     prices: dict[str, dict[str, float]] = Field(default_factory=dict)
 

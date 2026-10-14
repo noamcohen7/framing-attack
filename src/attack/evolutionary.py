@@ -33,6 +33,8 @@ class Candidate:
     generation: int = 0         # Which generation this was created in
     parent: Optional[str] = None  # Parent paraphrase (for lineage tracking)
     score_result: Optional[ScoreResult] = None
+    search_score: Optional[float] = None         # score during search, before confirmation
+    confirm_result: Optional[ScoreResult] = None  # fresh re-test; `score` is replaced by it
 
 
 @dataclass
@@ -72,6 +74,7 @@ class EvolutionarySearch:
         crossover_rate: float = 0.2,
         elite_count: int = 2,
         early_stop_score: float = 1.0,
+        confirm_samples: int = 10,
         seed: int = 42,
     ):
         self.paraphraser = paraphraser
@@ -83,6 +86,7 @@ class EvolutionarySearch:
         self.crossover_rate = crossover_rate
         self.elite_count = elite_count
         self.early_stop_score = early_stop_score
+        self.confirm_samples = confirm_samples
         self.rng = random.Random(seed)
 
     def search(self, qa_item: QAItem) -> EvolutionResult:
@@ -121,16 +125,17 @@ class EvolutionarySearch:
 
         # Sort by score (descending)
         population.sort(key=lambda c: c.score, reverse=True)
-        result.best_candidate = population[0]
 
         # Check early stop
-        if result.best_candidate.score >= self.early_stop_score:
+        if self._confirmed_early_stop(qa_item, population):
+            result.best_candidate = population[0]
             result.success = True
             result.generations_run = 1
             logger.info(
-                f"Early stop at gen 0: score={result.best_score:.2f}"
+                f"Early stop at gen 0: score={result.best_score:.2f} (confirmed)"
             )
             return result
+        result.best_candidate = self._best(result)
 
         # --- Generations 1..N ---
         for gen in range(1, self.num_generations):
@@ -167,21 +172,12 @@ class EvolutionarySearch:
             )
 
             # Merge: elites + new scored, keep top population_size
-            combined = [
-                Candidate(
-                    paraphrase=e.paraphrase,
-                    score=e.score,
-                    generation=e.generation,
-                    score_result=e.score_result,
-                )
-                for e in elites
-            ] + new_scored
+            # Same objects, not copies: keeps confirmation state on elites.
+            combined = list(elites) + new_scored
             combined.sort(key=lambda c: c.score, reverse=True)
             population = combined[: self.population_size]
-
-            # Update best
-            if population and population[0].score > result.best_score:
-                result.best_candidate = population[0]
+            stop = self._confirmed_early_stop(qa_item, population)
+            result.best_candidate = self._best(result)
 
             logger.info(
                 f"Gen {gen}: best_score={result.best_score:.2f}, "
@@ -189,15 +185,64 @@ class EvolutionarySearch:
             )
 
             # Early stop
-            if result.best_score >= self.early_stop_score:
+            if stop:
+                result.best_candidate = population[0]
                 result.success = True
                 result.generations_run = gen + 1
                 logger.info(f"Early stop at gen {gen}")
                 return result
 
         result.generations_run = self.num_generations
-        result.success = result.best_score > 0.5  # Majority wrong = success
+        # Majority wrong = success, on fresh samples. Confirm the best; if it
+        # fails, the next-best unconfirmed one gets its chance.
+        for cand in sorted(result.all_candidates, key=lambda c: c.score, reverse=True):
+            if cand.score <= 0.5:
+                break
+            if self._confirm(qa_item, cand):
+                result.success = True
+                break
+        result.best_candidate = self._best(result)
         return result
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _best(result: EvolutionResult) -> Optional[Candidate]:
+        """Highest-scoring candidate so far (confirmed scores replace search scores)."""
+        return max(result.all_candidates, key=lambda c: c.score, default=None)
+
+    def _confirm(self, qa_item: QAItem, cand: Candidate) -> bool:
+        """
+        Re-score `cand` with fresh samples and replace its score with that.
+        True if still majority-wrong. Already-confirmed candidates are not re-tested.
+        """
+        if self.confirm_samples <= 0:
+            return cand.score > 0.5
+        if cand.confirm_result is None:
+            cand.search_score = cand.score
+            cand.confirm_result = self.scorer.score(
+                qa_item, cand.paraphrase, num_samples=self.confirm_samples
+            )
+            cand.score = cand.confirm_result.wrongness_score
+            logger.info(
+                f"Confirm: search score {cand.search_score:.2f} -> "
+                f"{cand.score:.2f} on {self.confirm_samples} fresh samples"
+            )
+        return cand.score > 0.5
+
+    def _confirmed_early_stop(self, qa_item: QAItem, population: list[Candidate]) -> bool:
+        """
+        True if the top candidate hits early_stop_score AND survives confirmation.
+        Candidates that fail confirmation drop to their fresh score; the population
+        is re-sorted and the next one at the threshold is tried.
+        """
+        while population and population[0].score >= self.early_stop_score:
+            top = population[0]
+            if top.confirm_result is not None:
+                return top.score > 0.5   # confirmed earlier and still on top
+            if self._confirm(qa_item, top):
+                return True
+            population.sort(key=lambda c: c.score, reverse=True)
+        return False
 
     def _filter_and_score(
         self,

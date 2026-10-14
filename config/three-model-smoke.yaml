@@ -30,8 +30,9 @@ equivalence:
   require_both: false
 
 budget:
-  max_requests: 3000
-  max_usd: 2.0
+  max_requests: 450000      # per run; full run is ~400k calls worst case
+  max_usd: 30.0             # per run (estimated from token counts)
+  max_usd_total: 30.0       # across ALL runs: results/spend_ledger.json
   prices:
     openai/gpt-oss-20b:      {input_per_m: 0.075, output_per_m: 0.30}
     openai/gpt-oss-120b:     {input_per_m: 0.15, output_per_m: 0.60}

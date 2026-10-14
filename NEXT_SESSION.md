@@ -63,6 +63,24 @@ in `.env`, which is git-ignored.
   (borderline/post-cutoff questions, mild rewrites); 5 timeless questions
   best score 0.00 after 3 generations. 986 requests, ~$0.05.
 
+## Ready for the Phase 1 full run (2026-10-14, evening)
+
+- Spend cap hardened and tested live: checks before every request; unknown
+  model prices refuse to start; missing usage charged worst case; Gemini
+  thinking tokens counted; failed attempts count toward the request cap;
+  `max_usd_total` caps ALL runs via `results/spend_ledger.json`.
+  Caps: $30 per run, $30 total.
+- Attack gate 4-of-5 (`evolution.min_native_accuracy: 0.8`); winning
+  rephrasings re-tested on 10 fresh samples (`evolution.confirm_samples`).
+- `run_attack.py --resume --workers N`, `run_baselines.py --workers N`;
+  skipped questions logged in attack_results.json; baselines checkpoint
+  after every question and save native accuracy + answers.
+- `config/full-run.yaml`: 50 custom + 300 TriviaQA, paid-tier pacing.
+- BLOCKED ON: enabling Groq Developer tier and Gemini billing (free tier is
+  1,000 req/day/model; the run needs ~400k). Then:
+    python scripts/run_baselines.py --config config/full-run.yaml --workers 8
+    python scripts/run_attack.py    --config config/full-run.yaml --workers 8
+
 ## What is verified working
 
 - Full unit suite (70 tests) offline.

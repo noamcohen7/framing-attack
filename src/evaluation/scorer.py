@@ -7,6 +7,8 @@ an incorrect answer.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import logging
 from dataclasses import dataclass
 
@@ -88,7 +90,7 @@ class WrongnessScorer:
         self.sampling_temperature = sampling_temperature
         self.answer_match_method = answer_match_method
 
-    def score(self, qa_item: QAItem, paraphrase: str) -> ScoreResult:
+    def score(self, qa_item: QAItem, paraphrase: str, num_samples: Optional[int] = None) -> ScoreResult:
         """
         Score a paraphrased question by querying the target model.
 
@@ -102,7 +104,7 @@ class WrongnessScorer:
         # Query the target model multiple times
         responses = self.target_llm.sample(
             paraphrase,
-            n=self.num_samples,
+            n=num_samples or self.num_samples,
             temperature=self.sampling_temperature,
         )
 

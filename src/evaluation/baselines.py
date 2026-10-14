@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -195,34 +197,59 @@ class BaselineMeasurer:
         self,
         qa_items: list[QAItem],
         output_path: Optional[Path] = None,
+        workers: int = 1,
     ) -> tuple[list[BaselineResult], AggregateBaseline]:
         """
         Measure baselines for all questions.
 
         Args:
             qa_items: List of QA items to measure.
-            output_path: If provided, save results to this JSON file.
+            output_path: If provided, save results to this JSON file, after
+                every question (so a crash keeps what was measured).
+            workers: Questions measured in parallel.
 
         Returns:
-            Tuple of (per-question results, aggregate statistics).
+            Tuple of (per-question results in input order, aggregate statistics).
         """
+        order = {q.id: i for i, q in enumerate(qa_items)}
         results: list[BaselineResult] = []
+        lock = threading.Lock()
+        stop = threading.Event()
 
-        for qa_item in tqdm(qa_items, desc="Measuring baselines"):
+        def ordered() -> list[BaselineResult]:
+            return sorted(results, key=lambda r: order[r.qa_item_id])
+
+        def measure_one(qa_item: QAItem) -> None:
+            if stop.is_set():
+                return
             try:
                 result = self.measure_single(qa_item)
             except BudgetExceededError as e:
-                logger.error(f"Stopping baselines: {e}")
-                break
-            results.append(result)
+                if not stop.is_set():
+                    logger.error(f"Stopping baselines: {e}")
+                stop.set()
+                return
+            with lock:
+                results.append(result)
+                if output_path is not None:
+                    snapshot = ordered()
+                    self._save_results(snapshot, self._aggregate(snapshot, self.min_native_accuracy), output_path)
 
-        # Aggregate
+        if workers <= 1:
+            for qa_item in tqdm(qa_items, desc="Measuring baselines"):
+                measure_one(qa_item)
+                if stop.is_set():
+                    break
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [pool.submit(measure_one, q) for q in qa_items]
+                for _ in tqdm(as_completed(futures), total=len(futures), desc="Measuring baselines"):
+                    pass
+
+        results = ordered()
         agg = self._aggregate(results, self.min_native_accuracy)
-
-        # Save if requested
         if output_path is not None:
             self._save_results(results, agg, output_path)
-
         return results, agg
 
     @staticmethod
@@ -270,15 +297,21 @@ class BaselineMeasurer:
                     "question": r.question,
                     "ground_truth": r.ground_truth,
                     "native_error_rate": r.native_error_rate,
+                    "native_accuracy": r.native_score.accuracy if r.native_score else None,
+                    "native_abstained": r.native_score.num_abstained if r.native_score else None,
+                    "native_answers": r.native_score.extracted_answers if r.native_score else None,
                     "naive_avg_error_rate": r.naive_avg_error_rate,
                     "naive_max_error_rate": r.naive_max_error_rate,
                     "naive_paraphrases": r.naive_paraphrases,
+                    "naive_error_rates": [sc.wrongness_score for sc in r.naive_scores],
                 }
                 for r in results
             ],
         }
 
-        with open(path, "w") as f:
+        tmp = path.with_suffix(".tmp")
+        with open(tmp, "w") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+        tmp.replace(path)  # atomic
 
         logger.info(f"Baseline results saved to {path}")

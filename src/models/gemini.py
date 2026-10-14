@@ -90,7 +90,9 @@ class GeminiLLM(BaseLLM):
         if response.usage_metadata:
             usage = {
                 "prompt_tokens": response.usage_metadata.prompt_token_count,
-                "completion_tokens": response.usage_metadata.candidates_token_count,
+                # Thinking tokens are billed as output but not in candidates_token_count.
+                "completion_tokens": (response.usage_metadata.candidates_token_count or 0)
+                + (getattr(response.usage_metadata, "thoughts_token_count", None) or 0),
                 "total_tokens": response.usage_metadata.total_token_count,
             }
 

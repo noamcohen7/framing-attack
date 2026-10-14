@@ -37,6 +37,14 @@ def main():
         "--include-already-wrong", action="store_true",
         help="Include questions the model already gets wrong"
     )
+    parser.add_argument(
+        "--resume", action="store_true",
+        help="Keep existing results; skip questions already attacked or skipped"
+    )
+    parser.add_argument(
+        "--workers", type=int, default=1,
+        help="Questions attacked in parallel (rate limits and budget are shared)"
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -63,6 +71,8 @@ def main():
     pipeline.run_attack(
         qa_items,
         skip_already_wrong=not args.include_already_wrong,
+        resume=args.resume,
+        workers=args.workers,
     )
 
 

@@ -34,6 +34,10 @@ def main():
         "--max-samples", type=int, default=None,
         help="Maximum number of questions"
     )
+    parser.add_argument(
+        "--workers", type=int, default=1,
+        help="Questions measured in parallel (rate limits and budget are shared)"
+    )
     args = parser.parse_args()
 
     # Load config
@@ -60,7 +64,7 @@ def main():
     print(f"Target model: {config.target_model.provider}/{config.target_model.model_name}")
     print()
 
-    pipeline.run_baselines(qa_items)
+    pipeline.run_baselines(qa_items, workers=args.workers)
 
 
 if __name__ == "__main__":

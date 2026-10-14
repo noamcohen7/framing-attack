@@ -67,3 +67,37 @@ def test_generate_stops_after_max_calls():
     m = BaselineMeasurer(target_llm=None, auxiliary_llm=aux, scorer=None)
     assert m.generate_naive_paraphrases(Q, n=2) == []
     assert len(aux.prompts) == 2
+
+
+def test_measure_all_parallel_keeps_order_and_checkpoints(tmp_path):
+    import json
+    from src.data.loader import QAItem
+    from src.evaluation.scorer import ScoreResult
+
+    class Scorer:
+        def score_original(self, qa):
+            return ScoreResult(paraphrase=qa.question, wrongness_score=0.0, num_samples=5,
+                               num_correct=5, num_incorrect=0, num_abstained=0,
+                               extracted_answers=["a"] * 5)
+
+        def score(self, qa, p):
+            return self.score_original(qa)
+
+    class Aux(BaseLLM):
+        @property
+        def provider_name(self):
+            return "fake"
+
+        def _generate(self, prompt, temperature=None):
+            return LLMResponse(text="1. Rewrite one entirely\n2. A totally different phrasing", model="m", provider="fake")
+
+    items = [QAItem(id=f"q{i}", question=f"Question number {i}?", answer="a") for i in range(8)]
+    m = BaselineMeasurer(target_llm=None, auxiliary_llm=Aux(model_name="m", requests_per_minute=None),
+                         scorer=Scorer(), num_naive_paraphrases=2)
+    out = tmp_path / "baselines.json"
+    results, agg = m.measure_all(items, output_path=out, workers=4)
+    assert [r.qa_item_id for r in results] == [f"q{i}" for i in range(8)]
+    data = json.loads(out.read_text())
+    assert [q["id"] for q in data["per_question"]] == [f"q{i}" for i in range(8)]
+    assert data["per_question"][0]["native_accuracy"] == 1.0
+    assert agg.num_attackable == 8

@@ -15,6 +15,8 @@ from typing import Optional
 
 from src.models.base import BaseLLM
 
+from src.models.budget import BudgetExceededError
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -136,6 +138,8 @@ class Paraphraser:
                 p = self.generate_with_strategy(question, strategy)
                 if p:
                     results.append(p)
+            except BudgetExceededError:
+                raise
             except Exception as e:
                 logger.warning(f"Strategy generation failed: {e}")
         return results

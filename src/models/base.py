@@ -180,10 +180,14 @@ class BaseLLM(ABC):
                         prompt_tokens=response.usage.get("prompt_tokens", 0) or 0,
                         completion_tokens=response.usage.get("completion_tokens", 0) or 0,
                         cost_usd=response.usage.get("cost_usd"),
+                        prompt_chars=len(prompt),
+                        max_output_tokens=self.max_tokens,
                     )
                 return response
             except Exception as e:
                 last_error = e
+                if budget is not None:
+                    budget.record_failure()
                 if _is_rate_limit_error(e):
                     if rate_limit_attempt >= max_rate_limit_retries:
                         logger.error(

@@ -45,11 +45,126 @@ class TestBudgetGuard:
         b.record(model="m", prompt_tokens=1000, completion_tokens=1000, cost_usd=0.001)
         assert b.spent_usd == pytest.approx(0.001)
 
-    def test_unknown_model_without_cost_counts_requests_only(self):
+    def test_unknown_model_is_charged_fallback_price(self):
+        from src.models.budget import FALLBACK_PRICE
         b = BudgetGuard(max_requests=5, max_usd=1.0)
-        b.record(model="unknown", prompt_tokens=10, completion_tokens=10)
-        assert b.spent_usd == 0.0
-        assert b.requests == 1
+        b.record(model="unknown", prompt_tokens=1_000_000, completion_tokens=0)
+        assert b.spent_usd == pytest.approx(FALLBACK_PRICE["input_per_m"])
+        assert b.unpriced_models == {"unknown"}
+
+    def test_missing_usage_is_charged_worst_case(self):
+        b = BudgetGuard(max_usd=1.0, prices={"m": {"input_per_m": 1.0, "output_per_m": 1.0}})
+        b.record(model="m", prompt_chars=3000, max_output_tokens=500)  # no token counts
+        assert b.spent_usd == pytest.approx((1001 + 500) / 1_000_000)
+
+    def test_failures_count_toward_request_cap(self):
+        b = BudgetGuard(max_requests=2)
+        b.record_failure()
+        b.record_failure()
+        with pytest.raises(BudgetExceededError):
+            b.check()
+        assert b.failed_requests == 2
+
+    def test_missing_prices(self):
+        b = BudgetGuard(prices={"gpt-oss-20b": {}})
+        assert b.missing_prices(["openai/gpt-oss-20b", "other"]) == ["other"]
+
+
+class TestLedger:
+    def test_total_cap_spans_runs(self, tmp_path):
+        ledger = tmp_path / "ledger.json"
+        run1 = BudgetGuard(max_usd=10.0, max_usd_total=1.0, ledger_path=ledger)
+        run1.record(cost_usd=0.7)
+        run1.check()  # 0.7 < 1.0
+        # New process, fresh per-run budget, same ledger
+        run2 = BudgetGuard(max_usd=10.0, max_usd_total=1.0, ledger_path=ledger)
+        assert run2.total_usd == pytest.approx(0.7)
+        run2.record(cost_usd=0.3)
+        with pytest.raises(BudgetExceededError, match="Total spend cap"):
+            run2.check()
+
+    def test_ledger_file_contents(self, tmp_path):
+        import json
+        ledger = tmp_path / "ledger.json"
+        b = BudgetGuard(max_usd_total=5.0, ledger_path=ledger)
+        b.record(cost_usd=0.25)
+        b.record_failure()
+        data = json.loads(ledger.read_text())
+        assert data["total_usd"] == pytest.approx(0.25)
+        assert data["total_requests"] == 2
+        assert not ledger.with_suffix(".tmp").exists()
+
+    def test_total_cap_requires_ledger(self):
+        with pytest.raises(ValueError):
+            BudgetGuard(max_usd_total=1.0)
+
+
+class TestCapStopsRealCalls:
+    """Integration with BaseLLM.generate: once the cap trips, no request is sent."""
+
+    def _llm(self, fail=False):
+        from typing import Optional
+        from src.models.base import BaseLLM, LLMResponse
+
+        class CountingLLM(BaseLLM):
+            sent = 0
+
+            @property
+            def provider_name(self):
+                return "fake"
+
+            def _generate(self, prompt: str, temperature: Optional[float] = None):
+                CountingLLM.sent += 1
+                if fail:
+                    raise RuntimeError("boom")
+                return LLMResponse(text="x", model="m", provider="fake",
+                                   usage={"prompt_tokens": 1_000_000, "completion_tokens": 0})
+
+        return CountingLLM(model_name="m", requests_per_minute=None), CountingLLM
+
+    def test_spend_cap_blocks_next_request(self):
+        set_budget(BudgetGuard(max_usd=0.25, prices={"m": {"input_per_m": 0.10, "output_per_m": 0}}))
+        llm, cls = self._llm()
+        for _ in range(3):
+            llm.generate("q")            # $0.10 each -> $0.30
+        with pytest.raises(BudgetExceededError):
+            llm.generate("q")
+        assert cls.sent == 3             # the 4th request was never sent
+
+    def test_failed_attempts_hit_request_cap(self):
+        set_budget(BudgetGuard(max_requests=3))
+        llm, cls = self._llm(fail=True)
+        with pytest.raises(BudgetExceededError):
+            llm.generate("q", retries=10, backoff=0.0)
+        assert cls.sent == 3
+
+
+def test_pipeline_refuses_unpriced_models(tmp_path):
+    from src.attack.pipeline import AttackPipeline
+    from src.config import Config
+    cfg = Config()
+    cfg.experiment.output_dir = str(tmp_path)
+    cfg.budget.prices = {}
+    with pytest.raises(ValueError, match="no entry"):
+        AttackPipeline(cfg)
+
+
+def test_strategy_batch_does_not_swallow_budget_error():
+    from typing import Optional
+    from src.attack.paraphraser import Paraphraser
+    from src.models.base import BaseLLM
+
+    class Broke(BaseLLM):
+        @property
+        def provider_name(self):
+            return "fake"
+
+        def _generate(self, prompt: str, temperature: Optional[float] = None):
+            raise AssertionError("must not be called")
+
+    set_budget(BudgetGuard(max_requests=0))
+    with pytest.raises(BudgetExceededError):
+        Paraphraser(Broke(model_name="m", requests_per_minute=None)).generate_strategy_batch("q")
 
     def test_global_budget_accessor(self):
         assert get_budget() is None
