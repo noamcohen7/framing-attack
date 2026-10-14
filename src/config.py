@@ -159,6 +159,7 @@ def get_api_key(provider: str) -> str:
         "groq": "GROQ_API_KEY",
         "openai": "OPENAI_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
+        "deepinfra": "DEEPINFRA_API_KEY",
         "huggingface": "HF_TOKEN",
     }
     env_var = env_map.get(provider)

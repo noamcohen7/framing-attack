@@ -1,11 +1,14 @@
 # =============================================================================
-# Phase 1 full run (PAID tiers: Groq Developer + Gemini billing enabled).
-# Same models and caps as three-model.yaml, paced for paid rate limits.
+# Phase 1 full run (PAID: DeepInfra account + Gemini billing enabled).
+# Same models as three-model.yaml, but target + auxiliary served by DeepInfra
+# (Groq's paid tier was unavailable 2026-10-14; DeepInfra is also cheaper).
+# Keys in .env: DEEPINFRA_API_KEY, GEMINI_API_KEY.
+# DeepInfra limits concurrency (200 in-flight per model), not requests/min.
 #
-#   1. Baselines on 350 questions (50 custom + 300 TriviaQA), ~21k calls, ~$1:
+#   1. Baselines on 350 questions (50 custom + 300 TriviaQA), ~21k calls, ~$0.50:
 #      python scripts/run_baselines.py --config config/full-run.yaml --workers 8
-#   2. Attack the ones the model knows (native accuracy >= 4/5), ~$15-20:
-#      python scripts/run_attack.py --config config/full-run.yaml --workers 8
+#   2. Attack the ones the model knows (native accuracy >= 4/5):
+#      python scripts/run_attack.py --config config/full-run.yaml --workers 8   (~$7-8)
 #      (after an interruption or cap stop: add --resume)
 #
 # Spend: max_usd_total caps ALL runs together via results/spend_ledger.json.
@@ -15,22 +18,22 @@ dataset:
   max_samples: 350
 
 target_model:
-  provider: "groq"
+  provider: "deepinfra"
   model_name: "openai/gpt-oss-20b"
   temperature: 0.0
   max_tokens: 512
   reasoning_effort: "low"
   num_samples: 5
-  requests_per_minute: 900        # Groq Developer: 1K RPM / 250K TPM per model
+  requests_per_minute: null       # DeepInfra: concurrency-limited, no RPM cap
   concurrency: 5                  # the 5 samples of one rephrasing in parallel
 
 auxiliary_model:
-  provider: "groq"
+  provider: "deepinfra"
   model_name: "openai/gpt-oss-120b"
   temperature: 0.9
   max_tokens: 1024
   reasoning_effort: "low"
-  requests_per_minute: 700        # extraction ~225 tok/call: 700 RPM ~ 160K TPM, under 250K
+  requests_per_minute: null
   concurrency: 1
 
 equivalence:
@@ -47,6 +50,8 @@ budget:
   max_usd: 30.0             # per run (estimated from token counts)
   max_usd_total: 30.0       # across ALL runs: results/spend_ledger.json
   prices:
-    openai/gpt-oss-20b:      {input_per_m: 0.075, output_per_m: 0.30}
-    openai/gpt-oss-120b:     {input_per_m: 0.15, output_per_m: 0.60}
+    # DeepInfra list prices 2026-10-14 (DeepInfra also reports cost per call;
+    # the reported cost is used when present, these are the fallback).
+    openai/gpt-oss-20b:      {input_per_m: 0.03, output_per_m: 0.14}
+    openai/gpt-oss-120b:     {input_per_m: 0.037, output_per_m: 0.17}
     gemini-3.5-flash-lite:   {input_per_m: 0.30, output_per_m: 2.50}

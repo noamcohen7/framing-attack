@@ -82,3 +82,37 @@ class TestGenerate:
 
         llm = make_llm(handler)
         assert llm._generate("x").text == ""
+
+
+class TestDeepInfra:
+    def _handler(self, seen, usage):
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen["url"] = str(request.url)
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(200, json={
+                "model": "openai/gpt-oss-20b",
+                "choices": [{"message": {"content": "Gold"}, "finish_reason": "stop"}],
+                "usage": usage,
+            })
+        return handler
+
+    def test_endpoint_reasoning_effort_and_reported_cost(self):
+        seen = {}
+        usage = {"prompt_tokens": 80, "completion_tokens": 60, "total_tokens": 140,
+                 "estimated_cost": 0.0000108}
+        llm = make_llm(self._handler(seen, usage), provider="deepinfra", reasoning_effort="low")
+        resp = llm.generate("Element 79?")
+        assert seen["url"] == "https://api.deepinfra.com/v1/openai/chat/completions"
+        assert seen["body"]["reasoning_effort"] == "low"
+        assert "usage" not in seen["body"]
+        assert resp.usage["cost_usd"] == pytest.approx(0.0000108)
+
+    def test_no_reasoning_effort_by_default(self):
+        seen = {}
+        llm = make_llm(self._handler(seen, {"prompt_tokens": 1, "completion_tokens": 1}), provider="deepinfra")
+        resp = llm.generate("q")
+        assert "reasoning_effort" not in seen["body"]
+        assert "cost_usd" not in resp.usage   # falls back to the price table
+
+    def test_env_var(self):
+        assert PROVIDERS["deepinfra"]["env_var"] == "DEEPINFRA_API_KEY"

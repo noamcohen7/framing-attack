@@ -76,8 +76,11 @@ in `.env`, which is git-ignored.
   skipped questions logged in attack_results.json; baselines checkpoint
   after every question and save native accuracy + answers.
 - `config/full-run.yaml`: 50 custom + 300 TriviaQA, paid-tier pacing.
-- BLOCKED ON: enabling Groq Developer tier and Gemini billing (free tier is
-  1,000 req/day/model; the run needs ~400k). Then:
+- Groq Developer upgrades were "temporarily unavailable" (2026-10-14), and
+  the corporate proxy blocks openrouter.ai. full-run.yaml therefore serves
+  target + auxiliary from DeepInfra (same gpt-oss models, cheaper, uses
+  DeepInfra's reported per-call cost). Full run est. ~$8.
+- BLOCKED ON: DEEPINFRA_API_KEY in .env and Gemini billing enabled. Then:
     python scripts/run_baselines.py --config config/full-run.yaml --workers 8
     python scripts/run_attack.py    --config config/full-run.yaml --workers 8
 

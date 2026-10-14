@@ -1,5 +1,5 @@
 """
-OpenAI-compatible chat-completions client (OpenAI, OpenRouter).
+OpenAI-compatible chat-completions client (OpenAI, OpenRouter, DeepInfra).
 
 Talks to the /chat/completions endpoint directly over httpx, so one class
 serves every provider that speaks the OpenAI wire format.
@@ -33,6 +33,13 @@ PROVIDERS: dict[str, dict] = {
         "include_usage": True,  # OpenRouter reports cost in usage when asked
         "default_model": "google/gemini-3.5-flash-lite",
     },
+    "deepinfra": {
+        "base_url": "https://api.deepinfra.com/v1/openai",
+        "env_var": "DEEPINFRA_API_KEY",
+        "max_tokens_param": "max_tokens",
+        "include_usage": False,  # reports usage.estimated_cost on every response
+        "default_model": "openai/gpt-oss-120b",
+    },
 }
 
 
@@ -55,6 +62,7 @@ class OpenAICompatLLM(BaseLLM):
         concurrency: int = 1,
         api_key: Optional[str] = None,
         http_client: Optional[httpx.Client] = None,
+        reasoning_effort: Optional[str] = None,
     ):
         if provider not in PROVIDERS:
             raise ValueError(
@@ -70,6 +78,7 @@ class OpenAICompatLLM(BaseLLM):
             requests_per_minute,
             concurrency,
         )
+        self.reasoning_effort = reasoning_effort
         self._api_key = api_key or get_api_key(provider)
         if http_client is None:
             proxy = os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY")
@@ -92,6 +101,8 @@ class OpenAICompatLLM(BaseLLM):
         }
         if self._spec["include_usage"]:
             body["usage"] = {"include": True}
+        if self.reasoning_effort:
+            body["reasoning_effort"] = self.reasoning_effort
 
         headers = {"Authorization": f"Bearer {self._api_key}"}
         if self._provider == "openrouter":
@@ -120,8 +131,11 @@ class OpenAICompatLLM(BaseLLM):
             "completion_tokens": usage_raw.get("completion_tokens", 0),
             "total_tokens": usage_raw.get("total_tokens", 0),
         }
-        if usage_raw.get("cost") is not None:
-            usage["cost_usd"] = float(usage_raw["cost"])
+        # Provider-reported cost: OpenRouter "cost", DeepInfra "estimated_cost".
+        for key in ("cost", "estimated_cost"):
+            if usage_raw.get(key) is not None:
+                usage["cost_usd"] = float(usage_raw[key])
+                break
 
         return LLMResponse(
             text=text.strip(),

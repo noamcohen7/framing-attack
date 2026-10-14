@@ -25,7 +25,7 @@ def create_llm(
     Factory function to create an LLM client by provider name.
 
     Args:
-        provider: One of 'gemini', 'groq', 'openai', 'openrouter'.
+        provider: One of 'gemini', 'groq', 'openai', 'openrouter', 'deepinfra'.
         model_name: Model identifier (provider-specific). Uses provider default if None.
         temperature: Sampling temperature.
         max_tokens: Maximum tokens to generate.
@@ -55,7 +55,7 @@ def create_llm(
             concurrency=concurrency,
             reasoning_effort=reasoning_effort,
         )
-    elif provider in ("openai", "openrouter"):
+    elif provider in ("openai", "openrouter", "deepinfra"):
         from src.models.openai_compat import OpenAICompatLLM
 
         return OpenAICompatLLM(
@@ -65,10 +65,11 @@ def create_llm(
             max_tokens=max_tokens,
             requests_per_minute=requests_per_minute,
             concurrency=concurrency,
+            reasoning_effort=reasoning_effort,
         )
     else:
         raise ValueError(
-            f"Unknown provider: {provider!r}. Supported: gemini, groq, openai, openrouter"
+            f"Unknown provider: {provider!r}. Supported: gemini, groq, openai, openrouter, deepinfra"
         )
 
 
