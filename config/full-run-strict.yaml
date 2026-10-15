@@ -1,0 +1,63 @@
+# =============================================================================
+# Phase 1 MAIN run: full-run.yaml + strict judge + LLM answer grading.
+#
+# Why: in the first full run (lenient judge, string-matched answers) only 12
+# of 31 confirmed flips held up. The search exploited the judge ("Which
+# country won?" -> "Who lifted the trophy?") and the string matcher missed
+# correct answers ("Loreen, Sweden"). Both checks now run INSIDE the search.
+#
+#   python scripts/run_baselines.py --config config/full-run-strict.yaml --workers 8
+#   python scripts/run_attack.py    --config config/full-run-strict.yaml --workers 16
+#
+# Own output dir and spend ledger (results/strict/), so it can run alongside
+# the lenient run without the two processes racing on one ledger file.
+# =============================================================================
+dataset:
+  name: "combined"                # custom facts first, then TriviaQA
+  max_samples: 350
+
+target_model:
+  provider: "deepinfra"
+  model_name: "openai/gpt-oss-20b"
+  temperature: 0.0
+  max_tokens: 512
+  reasoning_effort: "low"
+  num_samples: 5
+  requests_per_minute: null       # DeepInfra: concurrency-limited, no RPM cap
+  concurrency: 5                  # the 5 samples of one rephrasing in parallel
+
+auxiliary_model:
+  provider: "deepinfra"
+  model_name: "openai/gpt-oss-120b"
+  temperature: 0.9
+  max_tokens: 1024
+  reasoning_effort: "low"
+  requests_per_minute: null
+  concurrency: 1
+
+equivalence:
+  nli_model: null                 # judge-only (no local model)
+  llm_judge:
+    provider: "gemini"
+    model_name: "gemini-3.5-flash-lite"
+    temperature: 0.0
+    requests_per_minute: 500      # paid tier; 429s wait for retry-after
+    strict: true                  # STRICT_JUDGE_PROMPT
+  require_both: false
+
+budget:
+  max_requests: 450000      # per run; full run is ~400k calls worst case
+  max_usd: 15.0             # per run
+  max_usd_total: 15.0       # across ALL strict runs: results/strict/spend_ledger.json
+  prices:
+    # DeepInfra list prices 2026-10-14 (DeepInfra also reports cost per call;
+    # the reported cost is used when present, these are the fallback).
+    openai/gpt-oss-20b:      {input_per_m: 0.03, output_per_m: 0.14}
+    openai/gpt-oss-120b:     {input_per_m: 0.037, output_per_m: 0.17}
+    gemini-3.5-flash-lite:   {input_per_m: 0.30, output_per_m: 2.50}
+
+answer_extraction:
+  method: "grade"                 # LLM grades each response vs the expected answer
+
+experiment:
+  output_dir: "results/strict"

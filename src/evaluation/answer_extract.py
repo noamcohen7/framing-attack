@@ -26,6 +26,37 @@ EXTRACTION_PROMPT = """Extract the factual answer from the following response to
 **Extracted answer:**"""
 
 
+GRADE_PROMPT = """You are grading a model's answer to a factual question.
+
+**Original question:** {question}
+**Expected answer:** {answer}{aliases}
+**Model's response:** {response}
+
+Decide whether the response answers the ORIGINAL question correctly.
+- CORRECT: the response's final answer is the expected answer or clearly the same entity (other spelling, full or short name, or the expected answer stated together with extra correct detail, e.g. "Loreen, representing Sweden" for "Sweden").
+- INCORRECT: the response commits to a different answer, or only names something related but different (e.g. a player when the question asks for a country, without naming the country).
+- NO_ANSWER: the response refuses, says it does not know, or gives no answer.
+If the response hedges between several answers without committing, grade INCORRECT unless its final answer is the expected one.
+
+Reply in this exact format:
+VERDICT: CORRECT | INCORRECT | NO_ANSWER
+ANSWER: <the answer the response gives, in a few words, or NO_ANSWER>"""
+
+
+def parse_grade(text: str) -> tuple[Optional[bool], str]:
+    """Parse GRADE_PROMPT output -> (True correct / False incorrect / None abstained, answer)."""
+    verdict_match = re.search(r"VERDICT:\s*(CORRECT|INCORRECT|NO_ANSWER)", text, re.IGNORECASE)
+    answer_match = re.search(r"ANSWER:\s*(.+)", text)
+    answer = answer_match.group(1).strip() if answer_match else ""
+    if not verdict_match:
+        logger.warning(f"Unparseable grade, counting as abstention: {text[:100]}")
+        return None, NO_ANSWER
+    verdict = verdict_match.group(1).upper()
+    if verdict == "NO_ANSWER":
+        return None, NO_ANSWER
+    return verdict == "CORRECT", answer or NO_ANSWER
+
+
 class AnswerExtractor:
     """
     Extracts and normalizes answers from LLM responses.
@@ -34,6 +65,8 @@ class AnswerExtractor:
       - 'llm': Use an LLM to extract the answer (most robust)
       - 'regex': Simple regex-based extraction (fastest)
       - 'hybrid': Try regex first, fall back to LLM
+      - 'grade': LLM grades the response against the expected answer (see
+                 `grade`); the scorer uses its verdict instead of string matching.
     """
 
     def __init__(
@@ -46,7 +79,7 @@ class AnswerExtractor:
         self.llm = llm
         self.normalize_answers = normalize
 
-        if method in ("llm", "hybrid") and llm is None:
+        if method in ("llm", "hybrid", "grade") and llm is None:
             raise ValueError(f"LLM client required for method='{method}'")
 
     def extract(self, question: str, response: str) -> str:
@@ -78,6 +111,22 @@ class AnswerExtractor:
             answer = self.normalize(answer)
 
         return answer
+
+    def grade(
+        self, question: str, response: str, answer: str, aliases: Optional[list[str]] = None
+    ) -> tuple[Optional[bool], str]:
+        """
+        Grade a response against the expected answer to the ORIGINAL question.
+
+        Returns (True correct / False incorrect / None abstained, extracted answer).
+        """
+        alias_text = f" (also accepted: {', '.join(aliases[:8])})" if aliases else ""
+        prompt = GRADE_PROMPT.format(question=question, answer=answer, aliases=alias_text, response=response)
+        result = self.llm.generate(prompt, temperature=0.0)
+        verdict, extracted = parse_grade(result.text)
+        if verdict is not None and self.normalize_answers:
+            extracted = self.normalize(extracted)
+        return verdict, extracted
 
     @staticmethod
     def is_abstention(answer: str) -> bool:

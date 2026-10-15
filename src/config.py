@@ -44,6 +44,7 @@ class LLMJudgeConfig(BaseModel):
     temperature: float = 0.0
     requests_per_minute: Optional[float] = 15
     concurrency: int = 1
+    strict: bool = False  # STRICT_JUDGE_PROMPT: rejects answer-type / criterion changes
 
 
 class EquivalenceConfig(BaseModel):

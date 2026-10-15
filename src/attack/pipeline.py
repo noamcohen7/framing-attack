@@ -111,6 +111,7 @@ class AttackPipeline:
                 nli_threshold=eq_cfg.nli_threshold,
                 llm=judge_llm,
                 require_both=eq_cfg.require_both,
+                strict_judge=eq_cfg.llm_judge.strict,
             )
         return self._validator
 

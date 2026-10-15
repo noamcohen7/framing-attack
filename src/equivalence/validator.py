@@ -47,6 +47,7 @@ class SemanticEquivalenceValidator:
         llm: Optional[BaseLLM] = None,
         require_both: bool = True,
         nli: Optional[object] = None,
+        strict_judge: bool = False,
     ):
         """
         Args:
@@ -57,6 +58,8 @@ class SemanticEquivalenceValidator:
             require_both: If True, both NLI and LLM must agree.
                           If False, NLI alone is sufficient.
             nli: Pre-built NLI validator (for tests); overrides nli_model.
+            strict_judge: Use the strict judge prompt (closes answer-type and
+                          criterion loopholes the search exploits).
         """
         if nli is not None:
             self.nli = nli
@@ -66,7 +69,7 @@ class SemanticEquivalenceValidator:
             self.nli = NLIValidator(model_name=nli_model, threshold=nli_threshold)
         else:
             self.nli = None
-        self.llm_judge = LLMJudge(llm) if llm is not None else None
+        self.llm_judge = LLMJudge(llm, strict=strict_judge) if llm is not None else None
         self.require_both = require_both
 
         if self.nli is None and self.llm_judge is None:

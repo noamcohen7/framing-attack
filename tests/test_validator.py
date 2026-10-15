@@ -68,3 +68,19 @@ class TestCombinedMode:
         v = SemanticEquivalenceValidator(nli=FakeNLI(0.99), llm=FakeJudgeLLM("YES"))
         kept = v.filter_valid("q", ["p1", "p2"])
         assert [p for p, _ in kept] == ["p1", "p2"]
+
+
+def test_strict_judge_uses_strict_prompt():
+    from src.equivalence.llm_judge import LLMJudge, STRICT_JUDGE_PROMPT, JUDGE_PROMPT
+    seen = []
+
+    class Rec:
+        def generate(self, prompt, temperature=None):
+            seen.append(prompt)
+            from src.models.base import LLMResponse
+            return LLMResponse(text="NO. Different answer type.", model="m", provider="fake")
+
+    assert LLMJudge(Rec(), strict=True).check_equivalence("A?", "B?")["is_equivalent"] is False
+    LLMJudge(Rec()).check_equivalence("A?", "B?")
+    assert "KIND of answer" in seen[0] and "KIND of answer" not in seen[1]
+    assert STRICT_JUDGE_PROMPT != JUDGE_PROMPT

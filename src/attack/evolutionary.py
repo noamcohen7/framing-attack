@@ -195,13 +195,17 @@ class EvolutionarySearch:
         result.generations_run = self.num_generations
         # Majority wrong = success, on fresh samples. Confirm the best; if it
         # fails, the next-best unconfirmed one gets its chance.
+        winner = None
         for cand in sorted(result.all_candidates, key=lambda c: c.score, reverse=True):
             if cand.score <= 0.5:
                 break
             if self._confirm(qa_item, cand):
-                result.success = True
+                winner = cand
                 break
-        result.best_candidate = self._best(result)
+        result.success = winner is not None
+        # Report the confirmed winner, not an unconfirmed candidate whose noisy
+        # search score happens to exceed the winner's fresh score.
+        result.best_candidate = winner or self._best(result)
         return result
 
     # ------------------------------------------------------------------

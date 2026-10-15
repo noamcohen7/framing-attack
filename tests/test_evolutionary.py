@@ -92,3 +92,10 @@ def test_confirmation_disabled():
                            population_size=4, num_generations=2, confirm_samples=0)
     result = s.search(QA)
     assert result.success and scorer.confirm_calls == []
+
+
+def test_reported_best_is_the_confirmed_winner():
+    # a: 0.8 search -> 0.6 fresh (confirmed). b: 0.7 search, never confirmed.
+    scorer = FakeScorer(search={"a": 0.8, "b": 0.7}, fresh={"a": 0.6, "b": 0.0})
+    result = _search(FakeParaphraser(["a", "b"]), scorer, num_generations=2).search(QA)
+    assert result.success and result.best_candidate.paraphrase == "a"

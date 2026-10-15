@@ -110,27 +110,32 @@ class WrongnessScorer:
 
         # Extract and evaluate answers
         raw_texts = [r.text for r in responses]
-        extracted = [
-            self.extractor.extract(paraphrase, r) for r in raw_texts
-        ]
-
         correct_flags = []
         abstained_flags = []
+        extracted = []
         num_abstained = 0
-        for ans in extracted:
-            if ans == NO_ANSWER or AnswerExtractor.is_abstention(ans):
-                correct_flags.append(False)
-                abstained_flags.append(True)
-                num_abstained += 1
+        for r in raw_texts:
+            if self.extractor.method == "grade":
+                # Graded against the ORIGINAL question, so a rephrasing cannot
+                # redefine what counts as correct.
+                verdict, ans = self.extractor.grade(
+                    qa_item.question, r, qa_item.answer, qa_item.aliases
+                )
+                abstained = verdict is None
+                is_correct = bool(verdict)
             else:
-                abstained_flags.append(False)
-                is_correct = AnswerExtractor.answers_match(
+                ans = self.extractor.extract(paraphrase, r)
+                abstained = ans == NO_ANSWER or AnswerExtractor.is_abstention(ans)
+                is_correct = (not abstained) and AnswerExtractor.answers_match(
                     predicted=ans,
                     ground_truth=qa_item.answer,
                     aliases=qa_item.aliases,
                     method=self.answer_match_method,
                 )
-                correct_flags.append(is_correct)
+            extracted.append(ans)
+            abstained_flags.append(abstained)
+            correct_flags.append(is_correct)
+            num_abstained += abstained
 
         num_correct = sum(correct_flags)
         num_samples = len(correct_flags)
