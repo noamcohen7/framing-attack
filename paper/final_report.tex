@@ -185,7 +185,13 @@ We demonstrate how to induce factual errors in systems the public treats as auth
 
 % ===========================================================================
 \section{Reproducibility}
-Code, configurations and tests are in the project repository; the main run is \texttt{scripts/run\_attack.py} with \texttt{-{}-config} \texttt{config/full-run-strict.yaml}, \texttt{-{}-shuffle-seed 42} and \texttt{-{}-max-attacked 120}; \texttt{scripts/analyze.py} and \texttt{scripts/audit\_flips.py} regenerate the tables. The seed fixes which questions are attacked; model outputs are sampled, so exact numbers vary slightly between runs.
+Code, configurations and tests are in the project repository; the main run is
+\begin{flushleft}\small\ttfamily
+scripts/run\_attack.py\\
+\quad -{}-config config/full-run-strict.yaml\\
+\quad -{}-shuffle-seed 42 -{}-max-attacked 120
+\end{flushleft}
+\noindent and \texttt{scripts/analyze.py} and \texttt{scripts/audit\_flips.py} regenerate the tables. The seed fixes which questions are attacked; model outputs are sampled, so exact numbers vary slightly between runs.
 
 \begin{thebibliography}{12}
 \bibitem{agrawal2025} L.~A. Agrawal et al. GEPA: Reflective prompt evolution can outperform reinforcement learning. \emph{arXiv preprint}, 2025.
