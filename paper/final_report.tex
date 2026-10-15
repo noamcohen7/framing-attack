@@ -1,0 +1,188 @@
+\documentclass[sigconf,nonacm]{acmart}
+\settopmatter{printacmref=false, printccs=false, printfolios=true}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\pagestyle{plain}
+
+\usepackage{booktabs}
+\usepackage{xcolor}
+% Numbers still to be filled in from the main (strict) run are marked \TBD.
+\newcommand{\TBD}[1]{\textcolor{red}{\textbf{[#1]}}}
+
+% ---------------------------------------------------------------------------
+% Results of the MAIN (strict) run: fill from results/strict/report.md
+\newcommand{\nAttacked}{120}
+\newcommand{\nFlips}{\TBD{F}}
+\newcommand{\asr}{\TBD{ASR}\%}
+\newcommand{\asrCI}{\TBD{lo}--\TBD{hi}\%}
+\newcommand{\nVerified}{\TBD{V}}
+\newcommand{\asrHuman}{\TBD{ASR-H}\%}
+\newcommand{\asrHumanCI}{\TBD{lo}--\TBD{hi}\%}
+\newcommand{\retestFail}{\TBD{R}\%}
+\newcommand{\judgeRej}{\TBD{J}\%}
+\newcommand{\medGen}{\TBD{G}}
+% ---------------------------------------------------------------------------
+
+\begin{document}
+
+\title{Framing the Truth: Flipping Black-Box LLM Answers\\via Semantically-Equivalent Paraphrasing}
+\subtitle{Final Report}
+
+\author{Noam Cohen}
+\thanks{ID 208012252.}
+\affiliation{\institution{Tel Aviv University}\country{}}
+
+\begin{abstract}
+Large language models (LLMs) are increasingly trusted as authorities for knowledge-intensive tasks such as fact checking. We ask whether this trust is robust to \emph{framing}: can a fluent, meaning-preserving rephrasing of a factual question---one a human would accept as the same question---steer a black-box LLM to a wrong answer? We build a black-box attack in which an auxiliary LLM proposes rephrasings, a semantic-equivalence judge rejects any that change the question, and an evolutionary search keeps the rephrasings that most often make the target answer wrong. Against \texttt{gpt-oss-20b} on 350 questions (TriviaQA plus a hand-built recency set), the attack flips the answer on \asr{} of the questions the model otherwise answers correctly (95\% CI \asrCI{}), against a noise floor of 16.8\% for unoptimized paraphrases. Our main methodological finding is that the attack is only as honest as its validator: with a lenient judge and string-matched answers, 40\% of questions appeared to flip, but only 42\% of those flips survived a stricter judge and model-based grading. The search had learned to exploit the validator---for example by turning ``Which \emph{country} won the 2022 World Cup?'' into ``\emph{Who} lifted the trophy?''. We describe the safeguards this required: native-accuracy gating, re-testing on fresh samples, a strict answer-type-aware judge, and grading against the original question.
+\end{abstract}
+
+\maketitle
+
+% ===========================================================================
+\section{Introduction}
+LLMs are rapidly being adopted as trusted oracles: users, journalists, and automated pipelines increasingly pose factual questions to them and treat the answers as authoritative. This trust rests on an implicit assumption of robustness---that the answer depends on the \emph{content} of a question, not on its incidental \emph{phrasing}.
+
+We test that assumption. Given a factual question $q$ with an unambiguous answer $y$, we seek a rephrasing $q'$ such that $\mathrm{equiv}(q,q') \wedge M(q') \neq y$ with high probability over the target model's sampling. We restrict the adversary to \emph{natural} rephrasings: no typos, no invisible or non-standard Unicode, no adversarial suffixes. Under this constraint a successful attack is not a ``gotcha'' but evidence of a framing effect, a sensitivity to presentation long documented in human judgment~\cite{tversky1981}. The threat model is black-box query access only, as with commercial APIs.
+
+\paragraph{Contributions.} (i) A black-box attack combining auxiliary-LLM paraphrase generation with evolutionary search under a semantic-equivalence guard. (ii) An empirical measurement of attack success against an open-weights model, set against a noise floor of unoptimized paraphrases. (iii) A methodological finding: an optimizer over paraphrases \emph{actively exploits} weaknesses in the equivalence validator and the answer checker, so success rates measured with lenient checks are inflated by more than a factor of two; we describe the safeguards that make the measurement credible.
+
+% ===========================================================================
+\section{Related Work}
+\paragraph{Adversarial attacks on LLMs.} Gradient-based trigger optimization such as GCG~\cite{zou2023} and its projected-gradient and REINFORCE variants~\cite{geisler2024,geisler2025}, and stealthier jailbreak generators such as AutoDAN~\cite{liu2024} and Best-of-$N$~\cite{hughes2025}, overwhelmingly target safety alignment and typically produce unnatural text. We target factual correctness and constrain the attack to fluent, equivalent rephrasings.
+
+\paragraph{Manipulating perceived authority.} Zhang et al.~\cite{zhang2026} use optimized adversarial perturbations to borrow a model's credibility for a chosen claim. We instead undermine correctness on questions the model otherwise answers rightly, using only rephrasings an ordinary user might write.
+
+\paragraph{Prompt sensitivity and framing.} LLM answers are inconsistent across paraphrases~\cite{elazar2021} and sensitive to superficial formatting~\cite{sclar2024}; TruthfulQA~\cite{lin2022} probes truthfulness under suggestive questions. These works measure sensitivity over naturally occurring or random variation; we \emph{search} for a worst-case equivalent rephrasing, and compare against random variation as a noise floor.
+
+\paragraph{Prompt optimization.} Our search follows the evolutionary, LLM-as-mutation-operator style of reflective prompt evolution such as GEPA~\cite{agrawal2025}.
+
+% ===========================================================================
+\section{Method}
+\subsection{Attack loop}
+For each question the search runs as follows.
+
+\emph{Generation 0.} The auxiliary LLM writes 10 diverse rephrasings, plus one rephrasing for each of 10 framing strategies: presupposition, passive/academic register, added true context, verification question (``Is it true that\ldots?''), relative clause, temporal anchoring, contrastive framing, statement completion, indirect question (``Can you tell me\ldots''), and a hypothetical scenario that does not change the answer.
+
+\emph{Generations 1--$G$.} Tournament selection picks parents from the population (size 10); 3 parents are mutated into 2 variants each and 2 pairs are recombined, keeping the 2 best candidates unchanged (elitism).
+
+\emph{Validation and scoring.} Every candidate must pass the equivalence judge (\S\ref{sec:validator}). Survivors are sent to the target 5 times at temperature 0.7; each response is graded against the ground truth (\S\ref{sec:grading}). The wrongness score is the fraction of \emph{answered} samples that are wrong; refusals are excluded from the score and reported separately, since a refusal is not a factual error.
+
+\emph{Stopping.} The search stops when a candidate scores 1.0 and survives re-testing (\S\ref{sec:retest}), or after $G$ generations; a question counts as flipped if its best candidate is wrong on a majority of fresh samples.
+
+\subsection{Safeguards}
+Each of the following was added after an earlier version of the pipeline produced spurious flips.
+
+\paragraph{Native-accuracy gate.} We attack a question only if the target answers the \emph{original} correctly in at least 4 of 5 samples. With a 2-of-3 rule, a question the model knows only 40\% of the time passes 35\% of the time and then ``flips'' on noise; 4-of-5 reduces this to 9\%. Questions the model always refuses are not treated as known (under the refusal-excluding score they would have wrongness 0, indistinguishable from always correct).
+
+\paragraph{Re-testing on fresh samples.}\label{sec:retest} The search scores roughly 100--170 candidates per question with 5 samples each, so the best score is biased upward by selection. A would-be winner is therefore re-scored on 10 \emph{fresh} samples and counts only if it is still majority-wrong; if it fails, its score is replaced by the fresh one and the search continues.
+
+\paragraph{Strict equivalence judge.}\label{sec:validator} An LLM judge (\texttt{gemini-3.5-flash-lite}, a different vendor from the target and auxiliary) decides whether two questions admit exactly the same correct answers. The strict prompt explicitly rejects changes in the \emph{kind} of answer requested (country vs.\ person), in scope or time frame, in the deciding criterion (``longest by overall length''), appeals to a source or authority that could change the answer, and added premises, while accepting changes of wording, register, voice, or politeness.
+
+\paragraph{Grading against the original question.}\label{sec:grading} Instead of extracting a short answer and string-matching it to the ground truth, an LLM grader sees the \emph{original} question, the expected answer, and the target's response, and returns correct, incorrect, or no answer. Grading against the original question prevents a rephrasing from redefining what counts as correct.
+
+% ===========================================================================
+\section{Experimental Setup}
+\paragraph{Models.} Target: \texttt{gpt-oss-20b} (open weights, reasoning effort low), chosen as a weak model on which flips should be common. Auxiliary (paraphrasing, grading): \texttt{gpt-oss-120b}. Both are served by DeepInfra. Judge: \texttt{gemini-3.5-flash-lite} (Google). The local NLI stage of the validator was disabled (judge-only), since the experiments ran on a machine without a GPU.
+
+\paragraph{Data.} 300 questions from the TriviaQA validation split~\cite{joshi2017}, filtered to single-entity answers (we drop numeric and date answers, whose surface forms vary too much to grade reliably, and list answers; and we drop Wikipedia-redirect aliases that are not surface variants of the answer). Plus 50 hand-built facts: 20 recent but pre-cutoff events (e.g.\ the 2022 World Cup, 2023 Nobel prizes), 26 timeless facts, and 4 events after the target's training cutoff, which are tagged and kept only for the refusal analysis. Time-sensitive facts were verified on 2026-10-14.
+
+\paragraph{Runs.} \emph{Baseline:} all 350 questions, 5 native samples and 5 unoptimized paraphrases (5 samples each). \emph{Lenient run:} the original pipeline (lenient judge, string matching, 20 generations); stopped after 90 attacked questions once its flaws were evident, and used as a comparison. \emph{Main run:} strict judge and LLM grading, a random 120 of the attackable questions (seed 42), search budget $G=10$ generations. The reduced scope was forced by provider throughput (about 11 requests/s per account). In the lenient run the median flip occurred at generation 5.
+
+\paragraph{Cost.} All runs together cost about \TBD{\$X} in API fees, enforced by a hard client-side budget cap shared across processes.
+
+% ===========================================================================
+\section{Results}
+
+\subsection{Baseline and noise floor}
+The target answers 63.6\% of the 350 questions correctly on average (native error 36.4\%); 202 questions (58\%) pass the 4-of-5 gate (74\% of the custom set, 55\% of TriviaQA). Refusals are rare (2--4\%), concentrated on the post-cutoff items.
+
+Unoptimized paraphrases already move the model. On the questions it knows, a single random paraphrase makes it majority-wrong 5.6\% of the time, and \textbf{16.8\%} of questions (95\% CI 12.3--22.6\%) have at least one of five random paraphrases that does. This is the noise floor an optimized attack must clear. It is not an equal-budget comparison: the attack evaluates far more candidates per question (\S\ref{sec:limits}).
+
+\subsection{Main result}
+\begin{table}[t]
+\caption{Attack success on questions the target answers correctly (native accuracy $\ge$ 4/5). Strict judge, LLM grading, 10-generation budget, flips confirmed on 10 fresh samples.}
+\label{tab:main}
+\begin{tabular}{lrrr}
+\toprule
+Set & Attacked & Flipped & Success (95\% CI) \\
+\midrule
+All & \nAttacked & \nFlips & \asr{} (\asrCI) \\
+TriviaQA & \TBD{n} & \TBD{k} & \TBD{\%} \\
+Custom & \TBD{n} & \TBD{k} & \TBD{\%} \\
+\midrule
+Human-verified & \nAttacked & \nVerified & \asrHuman{} (\asrHumanCI) \\
+Noise floor (5 random) & 202 & 34 & 16.8\% (12.3--22.6) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:main} gives the main result. The attack flips \asr{} of attacked questions. After manual review of every flip (is the rephrasing equivalent, and is the answer really wrong?), \asrHuman{} remain. Re-testing removed \retestFail{} of would-be flips, the judge rejected \judgeRej{} of candidates, and the median successful search needed \medGen{} generations.
+
+\TBD{1--2 sentences comparing to the noise floor once numbers are in.}
+
+\subsection{The optimizer exploits a lenient validator}
+\begin{table}[t]
+\caption{Flips found by the lenient pipeline (90 attacked questions), re-checked with the strict judge and the LLM grader.}
+\label{tab:audit}
+\begin{tabular}{lr}
+\toprule
+Confirmed flips (lenient pipeline) & 36 \;(40\% of 90) \\
+\quad rejected by strict judge (question changed) & 17 \\
+\quad not wrong when graded (correct answer missed) & 13 \\
+Survive both checks & 15 \;(17\% of 90) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Our first full run used the lenient judge and string matching. It reported a 40\% success rate, but only 15 of its 36 flips survive the strict checks (Table~\ref{tab:audit}). The failures fall into three types.
+
+\emph{The search changes the question.} ``Which country won the 2022 FIFA World Cup?'' became ``Who lifted the trophy at the 2022 FIFA World Cup?'', to which ``Lionel Messi'' is a correct answer. The same move (\emph{which country} $\rightarrow$ \emph{who}) recurred for Eurovision 2023. Others changed the deciding criterion (``\ldots rank as the longest \emph{based on overall length}'', inviting the Amazon) or embedded the answer in the question.
+
+\emph{The checker misses correct answers.} String matching scored ``College of Cardinals'' (for \emph{conclave}), ``Thomas Edward Yorke'' (for Thom Yorke) and ``Mammalia'' as wrong; 13 apparent flips were the model answering correctly in a different surface form.
+
+\emph{Ground truth is genuinely contested.} The Nile/Amazon ``longest river'' question has no uncontested answer and should not be in a framing benchmark.
+
+The lesson is that an attack that optimizes \emph{against} a validator measures the validator's blind spots as much as the model's. Weak checks do not just add noise; they are actively selected for.
+
+\subsection{What a real framing flip looks like}
+\TBD{2--4 examples from the human-verified main-run flips: original question, rephrasing, the model's answers on fresh samples.} Two candidates from the lenient run that pass both strict checks illustrate the pattern: ``To whom was the 2023 Nobel Peace Prize presented?'' (correct: Narges Mohammadi) drew a scatter of earlier laureates (ICAN, the ICRC, Al Gore); a leading appeal to authority, ``Which municipality is recognized as the capital of Myanmar \emph{in standard references}?'', drew the former capital Yangon in 6 of 10 samples (the strict judge rejects this one as an appeal to authority; we report it as a borderline case).
+
+% ===========================================================================
+\section{Limitations}\label{sec:limits}
+\paragraph{One target model.} We attacked a single, deliberately weak open model. Transferability to other models, planned in the intermediate report, remains future work; the saved rephrasings make it a re-scoring exercise.
+
+\paragraph{Budget and the noise floor.} The attack evaluates tens to a hundred-plus candidates per question, the noise floor five. The re-test on fresh samples removes the selection bias of picking the best of many noisy scores, but an equal-budget best-of-$N$ random baseline, which we did not run, is needed to attribute the gain to the evolutionary search rather than to the number of tries.
+
+\paragraph{Reduced scope.} The main run covers 120 of 202 attackable questions with a 10-generation budget; success rates under the planned 20 generations would be at least as high.
+
+\paragraph{Validator calibration.} The intermediate report proposed calibrating the judge against about 200 human-labeled pairs. We built the tooling (blind labeling sheet, population-weighted precision and recall) but report only the manual review of flips. The strict judge is deliberately conservative and also rejects some equivalent rephrasings, which can only lower the measured success rate.
+
+\paragraph{Same-family grading.} The grader (\texttt{gpt-oss-120b}) is from the same family as the target. A cross-vendor grader would remove any shared blind spot.
+
+% ===========================================================================
+\section{Defenses and Future Work}
+Our results suggest two cheap defenses, which we leave to future work: \emph{self-consistency over paraphrases}, answering several internally generated rephrasings of a question and aggregating, since the attack relies on one rephrasing pulling the model off its majority answer; and \emph{answer aggregation across samples}, since many flips are a shift in the answer distribution rather than a deterministic change. Further next steps: transferability across vendors, the equal-budget random baseline, and a taxonomy of successful framings over a larger set of human-verified flips.
+
+% ===========================================================================
+\section{Ethical Considerations}
+We demonstrate how to induce factual errors in systems the public treats as authoritative. All experiments are our own queries to publicly available models; we do not publish misleading content, and all elicited errors concern facts with well-established ground truth, used only for measurement. The framing patterns we find are generic (indirect questions, appeals to authority) rather than reusable exploits, and we frame the work as motivating validators and defenses. We complied with each provider's terms of service and rate limits.
+
+% ===========================================================================
+\section{Reproducibility}
+Code, configurations and tests are in the project repository; the main run is \texttt{scripts/run\_attack.py --config config/full-run-strict.yaml --shuffle-seed 42 --max-attacked 120}, and \texttt{scripts/analyze.py} and \texttt{scripts/audit\_flips.py} regenerate the tables. All runs are deterministic given the seed up to model sampling.
+
+\begin{thebibliography}{12}
+\bibitem{agrawal2025} L.~A. Agrawal et al. GEPA: Reflective prompt evolution can outperform reinforcement learning. \emph{arXiv preprint}, 2025.
+\bibitem{elazar2021} Y.~Elazar, N.~Kassner, S.~Ravfogel, A.~Ravichander, E.~Hovy, H.~Sch\"utze, and Y.~Goldberg. Measuring and improving consistency in pretrained language models. \emph{TACL}, 2021.
+\bibitem{geisler2025} S.~Geisler, T.~Wollschl\"ager, M.~Abdalla, V.~Cohen-Addad, J.~Gasteiger, and S.~G\"unnemann. REINFORCE adversarial attacks on large language models. \emph{arXiv preprint}, 2025.
+\bibitem{geisler2024} S.~Geisler, T.~Wollschl\"ager, M.~H.~I. Abdalla, J.~Gasteiger, and S.~G\"unnemann. Attacking large language models with projected gradient descent. \emph{arXiv preprint}, 2024.
+\bibitem{hughes2025} J.~Hughes et al. Best-of-$N$ jailbreaking. In \emph{Proc. NeurIPS}, 2025.
+\bibitem{joshi2017} M.~Joshi, E.~Choi, D.~Weld, and L.~Zettlemoyer. TriviaQA: A large scale distantly supervised challenge dataset for reading comprehension. In \emph{Proc. ACL}, 2017.
+\bibitem{lin2022} S.~Lin, J.~Hilton, and O.~Evans. TruthfulQA: Measuring how models mimic human falsehoods. In \emph{Proc. ACL}, 2022.
+\bibitem{liu2024} X.~Liu, N.~Xu, M.~Chen, and C.~Xiao. AutoDAN: Generating stealthy jailbreak prompts on aligned large language models. In \emph{Proc. ICLR}, 2024.
+\bibitem{sclar2024} M.~Sclar, Y.~Choi, Y.~Tsvetkov, and A.~Suhr. Quantifying language models' sensitivity to spurious features in prompt design. In \emph{Proc. ICLR}, 2024.
+\bibitem{tversky1981} A.~Tversky and D.~Kahneman. The framing of decisions and the psychology of choice. \emph{Science}, 211(4481):453--458, 1981.
+\bibitem{zhang2026} J.~Zhang, P.~Peetathawatchai, F.~Tram\`er, and A.~Shafran. Laundering AI authority with adversarial examples. \emph{arXiv preprint}, 2026.
+\bibitem{zou2023} A.~Zou, Z.~Wang, J.~Z. Kolter, and M.~Fredrikson. Universal and transferable adversarial attacks on aligned language models. \emph{arXiv preprint}, 2023.
+\end{thebibliography}
+
+\end{document}
