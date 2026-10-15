@@ -32,7 +32,7 @@
 \affiliation{\institution{Tel Aviv University}\country{}}
 
 \begin{abstract}
-Large language models (LLMs) are increasingly trusted as authorities for knowledge-intensive tasks such as fact checking. We ask whether this trust is robust to \emph{framing}: can a fluent, meaning-preserving rephrasing of a factual question---one a human would accept as the same question---steer a black-box LLM to a wrong answer? We build a black-box attack in which an auxiliary LLM proposes rephrasings, a semantic-equivalence judge rejects any that change the question, and an evolutionary search keeps the rephrasings that most often make the target answer wrong. Against \texttt{gpt-oss-20b} on 350 questions (TriviaQA plus a hand-built recency set), the attack flips the answer on \asr{} of the questions the model otherwise answers correctly (95\% CI \asrCI{}), against a noise floor of 16.8\% for unoptimized paraphrases. Our main methodological finding is that the attack is only as honest as its validator: with a lenient judge and string-matched answers, 40\% of questions appeared to flip, but only 42\% of those flips survived a stricter judge and model-based grading. The search had learned to exploit the validator---for example by turning ``Which \emph{country} won the 2022 World Cup?'' into ``\emph{Who} lifted the trophy?''. We describe the safeguards this required: native-accuracy gating, re-testing on fresh samples, a strict answer-type-aware judge, and grading against the original question.
+Large language models (LLMs) are increasingly trusted as authorities for knowledge-intensive tasks such as fact checking. We ask whether this trust is robust to \emph{framing}: can a fluent, meaning-preserving rephrasing of a factual question---one a human would accept as the same question---steer a black-box LLM to a wrong answer? We build a black-box attack in which an auxiliary LLM proposes rephrasings, a semantic-equivalence judge rejects any that change the question, and an evolutionary search keeps the rephrasings that most often make the target answer wrong. Against \texttt{gpt-oss-20b} on 350 questions (TriviaQA plus a hand-built recency set), the attack flips the answer on \asr{} of the questions the model otherwise answers correctly (95\% CI \asrCI{}), against 5.4\% for unoptimized paraphrases put through the same checks. Our main methodological finding is that the attack is only as honest as its validator: with a lenient judge and string-matched answers, 40\% of questions appeared to flip, but only 42\% of those flips survived a stricter judge and model-based grading. The search had learned to exploit the validator---for example by turning ``Which \emph{country} won the 2022 World Cup?'' into ``\emph{Who} lifted the trophy?''. We describe the safeguards this required: native-accuracy gating, re-testing on fresh samples, a strict answer-type-aware judge, and grading against the original question.
 \end{abstract}
 
 \maketitle
@@ -97,7 +97,9 @@ Each of the following was added after an earlier version of the pipeline produce
 \subsection{Baseline and noise floor}
 The target answers 63.6\% of the 350 questions correctly on average (native error 36.4\%); 202 questions (58\%) pass the 4-of-5 gate (74\% of the custom set, 55\% of TriviaQA). Refusals are rare (2--4\%), concentrated on the post-cutoff items.
 
-Unoptimized paraphrases already move the model. On the questions it knows, a single random paraphrase makes it majority-wrong 5.6\% of the time, and \textbf{16.8\%} of questions (95\% CI 12.3--22.6\%) have at least one of five random paraphrases that does. This is the noise floor an optimized attack must clear. It is not an equal-budget comparison: the attack evaluates far more candidates per question (\S\ref{sec:limits}).
+Unoptimized paraphrases already move the model. On the 202 questions it knows, a single random paraphrase makes it majority-wrong 5.6\% of the time, and 16.8\% of questions (34; 95\% CI 12.3--22.6\%) have at least one of five random paraphrases that does.
+
+Most of this is noise and meaning drift, however. Putting those 56 paraphrases through the \emph{same} checks as attack flips---hidden-character filter, strict judge, and re-test on 10 fresh samples---removes 14 as non-equivalent and 26 as failing the re-test, leaving \textbf{11 questions: a confirmed noise floor of 5.4\%} (95\% CI 3.1--9.5\%). This is the baseline an optimized attack must clear. It is still not an equal-budget comparison: the attack evaluates far more candidates per question (\S\ref{sec:limits}).
 
 \subsection{Main result}
 \begin{table}[t]
@@ -112,7 +114,8 @@ TriviaQA & \TBD{n} & \TBD{k} & \TBD{\%} \\
 Custom & \TBD{n} & \TBD{k} & \TBD{\%} \\
 \midrule
 Human-verified & \nAttacked & \nVerified & \asrHuman{} (\asrHumanCI) \\
-Noise floor (5 random) & 202 & 34 & 16.8\% (12.3--22.6) \\
+Noise floor, raw (5 random) & 202 & 34 & 16.8\% (12.3--22.6) \\
+Noise floor, same checks & 202 & 11 & 5.4\% (3.1--9.5) \\
 \bottomrule
 \end{tabular}
 \end{table}
