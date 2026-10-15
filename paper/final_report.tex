@@ -11,15 +11,15 @@
 % ---------------------------------------------------------------------------
 % Results of the MAIN (strict) run: fill from results/strict/report.md
 \newcommand{\nAttacked}{120}
-\newcommand{\nFlips}{\TBD{F}}
-\newcommand{\asr}{\TBD{ASR}\%}
-\newcommand{\asrCI}{\TBD{lo}--\TBD{hi}\%}
+\newcommand{\nFlips}{26}
+\newcommand{\asr}{21.7\%}
+\newcommand{\asrCI}{15.2--29.9\%}
 \newcommand{\nVerified}{\TBD{V}}
 \newcommand{\asrHuman}{\TBD{ASR-H}\%}
 \newcommand{\asrHumanCI}{\TBD{lo}--\TBD{hi}\%}
-\newcommand{\retestFail}{\TBD{R}\%}
-\newcommand{\judgeRej}{\TBD{J}\%}
-\newcommand{\medGen}{\TBD{G}}
+\newcommand{\retestFail}{67\%}
+\newcommand{\judgeRej}{9.2\%}
+\newcommand{\medGen}{4.5}
 % ---------------------------------------------------------------------------
 
 \begin{document}
@@ -89,7 +89,7 @@ Each of the following was added after an earlier version of the pipeline produce
 
 \paragraph{Runs.} \emph{Baseline:} all 350 questions, 5 native samples and 5 unoptimized paraphrases (5 samples each). \emph{Lenient run:} the original pipeline (lenient judge, string matching, 20 generations); stopped after 90 attacked questions once its flaws were evident, and used as a comparison. \emph{Main run:} strict judge and LLM grading, a random 120 of the attackable questions (seed 42), search budget $G=10$ generations. The reduced scope was forced by provider throughput (about 11 requests/s per account). In the lenient run the median flip occurred at generation 5.
 
-\paragraph{Cost.} All runs together cost about \TBD{\$X} in API fees, enforced by a hard client-side budget cap shared across processes.
+\paragraph{Cost.} All runs together cost about \$8.65 in API fees (about 305{,}000 requests), enforced by a hard client-side budget cap shared across processes.
 
 % ===========================================================================
 \section{Results}
@@ -110,8 +110,8 @@ Most of this is noise and meaning drift, however. Putting those 56 paraphrases t
 Set & Attacked & Flipped & Success (95\% CI) \\
 \midrule
 All & \nAttacked & \nFlips & \asr{} (\asrCI) \\
-TriviaQA & \TBD{n} & \TBD{k} & \TBD{\%} \\
-Custom & \TBD{n} & \TBD{k} & \TBD{\%} \\
+TriviaQA & 96 & 24 & 25.0\% (17.4--34.5) \\
+Custom & 24 & 2 & 8.3\% (2.3--25.8) \\
 \midrule
 Human-verified & \nAttacked & \nVerified & \asrHuman{} (\asrHumanCI) \\
 Noise floor, raw (5 random) & 202 & 34 & 16.8\% (12.3--22.6) \\
@@ -122,7 +122,7 @@ Noise floor, same checks & 202 & 11 & 5.4\% (3.1--9.5) \\
 
 Table~\ref{tab:main} gives the main result. The attack flips \asr{} of attacked questions. After manual review of every flip (is the rephrasing equivalent, and is the answer really wrong?), \asrHuman{} remain. Re-testing removed \retestFail{} of would-be flips, the judge rejected \judgeRej{} of candidates, and the median successful search needed \medGen{} generations.
 
-\TBD{1--2 sentences comparing to the noise floor once numbers are in.}
+Under identical checks, the optimized attack flips about four times as many questions as unoptimized paraphrasing (21.7\% vs.\ 5.4\%), and the 95\% intervals do not overlap. Flips are much rarer on the custom set (8.3\%), whose questions are short and well known, than on TriviaQA (25.0\%), whose long, clue-laden trivia questions leave more room for reframing. One further flip was discarded because its rephrasing contained a hidden character (\S\ref{sec:exploit}). Re-testing mattered even more under strict checks than under lenient ones: two thirds of would-be flips (55 of 82) did not hold up on fresh samples, against 44\% in the lenient run.
 
 \subsection{The optimizer exploits a lenient validator}\label{sec:exploit}
 \begin{table}[t]

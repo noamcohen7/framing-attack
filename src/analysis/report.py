@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.equivalence.validator import hidden_characters
+from src.evaluation.answer_extract import AnswerExtractor
 
 _YES = {"y", "yes", "1", "true", "t"}
 _NO = {"n", "no", "0", "false", "f"}
@@ -92,13 +93,17 @@ def attack_summary(payload: dict, human: Optional[dict[str, bool]] = None) -> di
     failed_retest = sum(1 for c in retested if c["confirm"]["score"] <= 0.5)
     out["retest"] = {"retested": len(retested), "failed_retest": failed_retest}
 
-    wins = [winning_candidate(r) for r in flips]
+    win_pairs = [(r, winning_candidate(r)) for r in flips]
+    wins = [c for _, c in win_pairs]
     out["winner_abstention_rate"] = _mean(
         [c["confirm"]["num_abstained"] / c["confirm"]["num_samples"]
          for c in wins if c and c.get("confirm")])
+    # Answers on winning rewrites, minus those matching the expected answer
+    # (fresh-sample answers include the correct minority).
     out["wrong_answers"] = Counter(
-        a for c in wins if c and c.get("confirm")
-        for a in c["confirm"]["extracted_answers"] if a and a != "NO_ANSWER"
+        a for r, c in win_pairs if c and c.get("confirm")
+        for a in c["confirm"]["extracted_answers"]
+        if a and a != "NO_ANSWER" and not AnswerExtractor.answers_match(a, r["ground_truth"])
     ).most_common(10)
 
     if human is not None:

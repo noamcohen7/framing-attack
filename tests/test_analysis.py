@@ -57,6 +57,7 @@ def test_attack_summary():
     assert s["judge_rejection_rate"] == pytest.approx(16 / 424)
     assert s["generations_to_flip"]["median"] == 3
     assert s["wrong_answers"][0] == ("wrong", 14)
+    assert all(a != "right" for a, _ in s["wrong_answers"])   # expected answer excluded
 
 
 def test_human_verified_rate():
