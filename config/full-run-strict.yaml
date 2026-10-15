@@ -7,7 +7,13 @@
 # correct answers ("Loreen, Sweden"). Both checks now run INSIDE the search.
 #
 #   python scripts/run_baselines.py --config config/full-run-strict.yaml --workers 8
-#   python scripts/run_attack.py    --config config/full-run-strict.yaml --workers 16
+#   python scripts/run_attack.py    --config config/full-run-strict.yaml --workers 32 \
+#       --shuffle-seed 42 --max-attacked 120
+#
+# Scope (2026-10-15): DeepInfra throughput (~11 calls/s per account) made the
+# full 192 questions x 20 generations a 5-7 h run, so the main run uses a
+# random 120 attackable questions and a 10-generation search budget. In the
+# lenient run the median flip came at generation 5.
 #
 # Own output dir and spend ledger (results/strict/), so it can run alongside
 # the lenient run without the two processes racing on one ledger file.
@@ -58,6 +64,9 @@ budget:
 
 answer_extraction:
   method: "grade"                 # LLM grades each response vs the expected answer
+
+evolution:
+  num_generations: 10            # see Scope above
 
 experiment:
   output_dir: "results/strict"

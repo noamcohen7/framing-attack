@@ -45,6 +45,14 @@ def main():
         "--workers", type=int, default=1,
         help="Questions attacked in parallel (rate limits and budget are shared)"
     )
+    parser.add_argument(
+        "--max-attacked", type=int, default=None,
+        help="Stop after this many questions pass the native-accuracy gate"
+    )
+    parser.add_argument(
+        "--shuffle-seed", type=int, default=None,
+        help="Shuffle question order with this seed (mixes datasets before --max-attacked)"
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -63,6 +71,10 @@ def main():
         seed=config.experiment.seed,
     )
 
+    if args.shuffle_seed is not None:
+        import random
+        random.Random(args.shuffle_seed).shuffle(qa_items)
+
     print(f"Loaded {len(qa_items)} questions")
     print(f"Target model: {config.target_model.provider}/{config.target_model.model_name}")
     print(f"Auxiliary model: {config.auxiliary_model.provider}/{config.auxiliary_model.model_name}")
@@ -73,6 +85,7 @@ def main():
         skip_already_wrong=not args.include_already_wrong,
         resume=args.resume,
         workers=args.workers,
+        max_attacked=args.max_attacked,
     )
 
 

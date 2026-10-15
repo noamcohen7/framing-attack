@@ -136,3 +136,24 @@ def test_budget_stop_halts_remaining_questions(tmp_path):
     assert s.seen == ["q0", "q1"]           # nothing after the cap tripped
     data = json.loads((tmp_path / "attack_results.json").read_text())
     assert [r["id"] for r in data["results"]] == ["q0"]
+
+
+def test_max_attacked_stops_new_searches(tmp_path):
+    s = _Searcher()
+    _wired(tmp_path, _Gate(unknown={"q1"}), s).run_attack(_items(10), max_attacked=3)
+    assert s.seen == ["q0", "q2", "q3"]        # q1 failed the gate and does not count
+    data = json.loads((tmp_path / "attack_results.json").read_text())
+    assert [s["id"] for s in data["skipped"]] == ["q1"]
+
+
+def test_max_attacked_counts_prior_runs_on_resume(tmp_path):
+    _wired(tmp_path, _Gate(), _Searcher()).run_attack(_items(2))
+    s2 = _Searcher()
+    _wired(tmp_path, _Gate(), s2).run_attack(_items(10), resume=True, max_attacked=3)
+    assert s2.seen == ["q2"]
+
+
+def test_max_attacked_parallel_is_exact(tmp_path):
+    s = _Searcher()
+    _wired(tmp_path, _Gate(), s).run_attack(_items(40), workers=8, max_attacked=7)
+    assert len(s.seen) == 7

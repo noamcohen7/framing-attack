@@ -203,6 +203,7 @@ class AttackPipeline:
         skip_already_wrong: bool = True,
         resume: bool = False,
         workers: int = 1,
+        max_attacked: Optional[int] = None,
     ) -> list[EvolutionResult]:
         """
         Run the evolutionary attack on all questions.
@@ -213,6 +214,9 @@ class AttackPipeline:
                 attacked or skipped there (failed ones are retried).
             workers: Questions attacked in parallel. Rate limits and the budget
                 are shared across workers.
+            max_attacked: Stop starting new searches once this many questions
+                (including earlier runs on --resume) have passed the gate.
+                Questions not reached are left unprocessed, not marked skipped.
         """
         if qa_items is None:
             qa_items = self._load_data()
@@ -234,13 +238,17 @@ class AttackPipeline:
         lock = threading.Lock()
         stop = threading.Event()
         min_acc = self.config.evolution.min_native_accuracy
+        admitted = [len(prior_entries)]  # questions that passed the gate (mutable for closure)
 
         def checkpoint():
             with lock:
                 self._save_attack_results(results, failed, skipped, prior_entries)
 
+        def full() -> bool:
+            return max_attacked is not None and admitted[0] >= max_attacked
+
         def attack_one(qa_item: QAItem) -> None:
-            if stop.is_set():
+            if stop.is_set() or full():
                 return
             try:
                 if skip_already_wrong:
@@ -261,6 +269,10 @@ class AttackPipeline:
                             })
                         checkpoint()
                         return
+                with lock:
+                    if full():
+                        return
+                    admitted[0] += 1
                 evo_result = self.searcher.search(qa_item)
             except BudgetExceededError as e:
                 if not stop.is_set():
