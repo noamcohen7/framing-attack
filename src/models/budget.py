@@ -8,7 +8,9 @@ BudgetExceededError so the pipeline can stop and save partial results.
 Caps:
   - max_requests / max_usd: per run (this process).
   - max_usd_total: across ALL runs, persisted in a ledger file, so a
-    baseline run + an attack run + a resumed attack share one ceiling.
+    baseline run + an attack run + a resumed attack share one ceiling. Safe
+    for several processes at once: each adds its own spend under a file lock
+    (read-add-write), and check() sees others' spend as of its last write.
 
 Cost is the provider-reported cost when available (OpenRouter), else
 estimated from token counts and the `prices` table. The estimate errs high:
@@ -24,6 +26,7 @@ the real bill can differ from the estimate.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
 import os
@@ -73,7 +76,8 @@ class BudgetGuard:
         self.estimated_requests = 0  # requests whose cost was estimated, not reported
         self.unpriced_models: set[str] = set()
         self._lock = threading.Lock()
-        self._prior_usd, self._prior_requests = self._read_ledger()
+        # Ledger totals (all processes), as of this process's last read/write.
+        self._ledger_usd, self._ledger_requests = self._read_ledger()
 
     # ------------------------------------------------------------------ prices
     def _price(self, model: Optional[str]) -> Optional[dict[str, float]]:
@@ -96,25 +100,36 @@ class BudgetGuard:
             data = json.load(f)
         return float(data.get("total_usd", 0.0)), int(data.get("total_requests", 0))
 
-    def _write_ledger(self) -> None:
+    def _add_to_ledger(self, usd: float, requests: int) -> None:
+        """Add this request's spend to the shared ledger (read-add-write under a file lock)."""
         if self.ledger_path is None:
             return
         self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
-        data = {
-            "total_usd": self._prior_usd + self.spent_usd,
-            "total_requests": self._prior_requests + self.requests,
-            "max_usd_total": self.max_usd_total,
-            "updated": time.strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        tmp = self.ledger_path.with_suffix(".tmp")
-        with open(tmp, "w") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp, self.ledger_path)  # atomic: a crash never leaves a half-written ledger
+        lock_path = self.ledger_path.with_suffix(".lock")
+        with open(lock_path, "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                total_usd, total_requests = self._read_ledger()
+                total_usd += usd
+                total_requests += requests
+                data = {
+                    "total_usd": total_usd,
+                    "total_requests": total_requests,
+                    "max_usd_total": self.max_usd_total,
+                    "updated": time.strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                tmp = self.ledger_path.with_suffix(f".{os.getpid()}.tmp")
+                with open(tmp, "w") as f:
+                    json.dump(data, f, indent=2)
+                os.replace(tmp, self.ledger_path)  # atomic
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+        self._ledger_usd, self._ledger_requests = total_usd, total_requests
 
     @property
     def total_usd(self) -> float:
-        """Spend across all runs recorded in the ledger, including this one."""
-        return self._prior_usd + self.spent_usd
+        """Spend across all runs sharing the ledger (as of the last write), or this run's."""
+        return self._ledger_usd if self.ledger_path is not None else self.spent_usd
 
     # ------------------------------------------------------------------ record
     def record(
@@ -129,6 +144,7 @@ class BudgetGuard:
         """Record one completed request."""
         with self._lock:
             self.requests += 1
+            before = self.spent_usd
             if cost_usd is not None:
                 self.spent_usd += float(cost_usd)
             else:
@@ -147,14 +163,14 @@ class BudgetGuard:
                     + completion_tokens * price.get("output_per_m", 0.0)
                 ) / 1_000_000
                 self.estimated_requests += 1
-            self._write_ledger()
+            self._add_to_ledger(self.spent_usd - before, 1)
 
     def record_failure(self) -> None:
         """Count a failed attempt toward the request cap (no token info, so no USD)."""
         with self._lock:
             self.requests += 1
             self.failed_requests += 1
-            self._write_ledger()
+            self._add_to_ledger(0.0, 1)
 
     # ------------------------------------------------------------------ check
     def check(self) -> None:

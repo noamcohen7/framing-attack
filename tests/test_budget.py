@@ -177,3 +177,33 @@ def test_strategy_batch_does_not_swallow_budget_error():
         b.record(cost_usd=0.5)
         s = b.summary()
         assert "1/100" in s and "0.50" in s
+
+
+class TestSharedLedger:
+    def test_two_processes_add_not_overwrite(self, tmp_path):
+        ledger = tmp_path / "ledger.json"
+        a = BudgetGuard(max_usd_total=1.0, ledger_path=ledger)   # e.g. baseline process
+        b = BudgetGuard(max_usd_total=1.0, ledger_path=ledger)   # e.g. attack process
+        a.record(cost_usd=0.4)
+        b.record(cost_usd=0.4)     # b must see a's 0.4, not overwrite it
+        import json
+        assert json.loads(ledger.read_text())["total_usd"] == pytest.approx(0.8)
+        a.record(cost_usd=0.3)     # total 1.1 >= 1.0
+        with pytest.raises(BudgetExceededError, match="Total"):
+            a.check()
+
+    def test_concurrent_threads_lose_no_spend(self, tmp_path):
+        import json, threading
+        ledger = tmp_path / "ledger.json"
+        guards = [BudgetGuard(ledger_path=ledger) for _ in range(4)]
+
+        def spend(g):
+            for _ in range(50):
+                g.record(cost_usd=0.01)
+
+        ts = [threading.Thread(target=spend, args=(g,)) for g in guards]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+        data = json.loads(ledger.read_text())
+        assert data["total_usd"] == pytest.approx(2.0)
+        assert data["total_requests"] == 200
