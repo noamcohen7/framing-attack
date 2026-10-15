@@ -12,9 +12,9 @@
 \newcommand{\nFlips}{26}
 \newcommand{\asr}{21.7\%}
 \newcommand{\asrCI}{15.2--29.9\%}
-\newcommand{\nVerified}{19}
-\newcommand{\asrHuman}{15.8\%}
-\newcommand{\asrHumanCI}{10.4--23.4\%}
+\newcommand{\nVerified}{15}
+\newcommand{\asrHuman}{12.5\%}
+\newcommand{\asrHumanCI}{7.7--19.6\%}
 \newcommand{\retestFail}{67\%}
 \newcommand{\judgeRej}{9.2\%}
 \newcommand{\medGen}{4.5}
@@ -111,14 +111,14 @@ All & \nAttacked & \nFlips & \asr{} (15.2--29.9) \\
 TriviaQA & 96 & 24 & 25.0\% (17.4--34.5) \\
 Custom & 24 & 2 & 8.3\% (2.3--25.8) \\
 \midrule
-Human-verified & \nAttacked & \nVerified & \asrHuman{} (10.4--23.4) \\
+Human-verified & \nAttacked & \nVerified & \asrHuman{} (7.7--19.6) \\
 Noise floor, raw (5 random) & 202 & 34 & 16.8\% (12.3--22.6) \\
 Noise floor, same checks & 202 & 11 & 5.4\% (3.1--9.5) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:main} gives the main result. The attack flips \asr{} of attacked questions. Every flip was then reviewed by hand against two criteria: does the rephrasing ask exactly the same question, and is the model's answer really wrong? Labels were proposed by an LLM assistant (Claude) with a one-line justification per flip, and checked and approved by the author. Of 27 flips (including the one with a hidden character), 8 were rejected: 1 for the hidden character, 6 because the rephrasing still changed the question in ways the strict judge missed (``Which country won Eurovision 2023?'' $\rightarrow$ ``Who took first place\ldots?''; a rephrasing of the Buenos Aires question that names the R\'io de la Plata and then asks which river \emph{forms} it; ``official title'' inviting ``Prime Minister'' instead of a peerage), and 1 because the grader was too strict (``the study of eroticism and sexual desire'' for \emph{sex}). \textbf{\nVerified{} flips remain: a human-verified success rate of \asrHuman{}} (95\% CI \asrHumanCI{}), still about three times the automatically checked noise floor. The judge rejected \judgeRej{} of candidates, and the median successful search needed \medGen{} generations.
+Table~\ref{tab:main} gives the main result. The attack flips \asr{} of attacked questions. Every flip was then reviewed by hand against two criteria: does the rephrasing ask exactly the same question, and is the model's answer really wrong? Labels were proposed by an LLM assistant (Claude) with a one-line justification per flip, in two passes (the second against the target's raw responses), and checked and approved by the author. Of 27 flips (including the one with a hidden character), 12 were rejected: 1 for the hidden character, 9 because the rephrasing still changed the question or added a premise in ways the strict judge missed (``Which country won Eurovision 2023?'' $\rightarrow$ ``Who took first place\ldots?''; a rephrasing of the Buenos Aires question that names the R\'io de la Plata and then asks which river \emph{forms} it; ``official title'' inviting ``Prime Minister'' instead of a peerage; ``By which other body of water is the Suez Canal joined to the Red Sea?'', which also reads as \emph{via} which water, making ``Gulf of Suez'' correct), and 2 because the answer was not really wrong (the grader was too strict on ``the study of eroticism and sexual desire'' for \emph{sex}; another flip rested mostly on empty responses). \textbf{\nVerified{} flips remain: a human-verified success rate of \asrHuman{}} (95\% CI \asrHumanCI{}), about twice the automatically checked noise floor. The two intervals overlap slightly, so on verified flips the gap is suggestive rather than conclusive; note that the noise floor was not hand-reviewed, and review would likely lower it too. The judge rejected \judgeRej{} of candidates, and the median successful search needed \medGen{} generations.
 
 Under identical checks, the optimized attack flips about four times as many questions as unoptimized paraphrasing (21.7\% vs.\ 5.4\%), and the 95\% intervals do not overlap. Flips are much rarer on the custom set (8.3\%), whose questions are short and well known, than on TriviaQA (25.0\%), whose long, clue-laden trivia questions leave more room for reframing. Re-testing mattered even more under strict checks than under lenient ones: two thirds of would-be flips (55 of 82) did not hold up on fresh samples, against 44\% in the lenient run.
 
@@ -149,13 +149,13 @@ Our first full run used the lenient judge and string matching. It reported a 40\
 The lesson is that an attack that optimizes \emph{against} a validator measures the validator's blind spots as much as the model's. Weak checks do not just add noise; they are actively selected for.
 
 \subsection{What a real framing flip looks like}
-The verified flips are strikingly mundane. None uses an exotic trick; most are a plain rewording, a change of voice, or added harmless context. Counts are wrong answers out of 10 fresh samples.
+The verified flips are strikingly mundane. None uses an exotic trick; most are a plain rewording, a reordering of clauses, or added harmless context. Counts are wrong answers out of 10 fresh samples.
 
 \begin{itemize}
 \item \emph{Original:} ``What is the climate change agreement \ldots\ named after the Japanese city in which participating nations agreed its framework in 1997?'' \emph{Rephrased:} ``Which climate-change treaty, whose framework was settled in Kyoto in 1997, is intended to cap atmospheric greenhouse-gas levels?'' Although the rephrasing \emph{names} Kyoto, 7/10 answers are ``the Paris Agreement''.
 \item \emph{Original:} ``What Caribbean nation is considered the first black-led republic in the world?'' \emph{Rephrased:} ``Identify the Caribbean nation that became the inaugural black-led republic on the global stage.'' 9/10 wrong (Trinidad and Tobago, Barbados, Jamaica); the answer is Haiti.
 \item \emph{Original:} ``\ldots\ Idi Amin Dada was the president of what African nation from 1971 to 1979?'' \emph{Rephrased:} ``Which African nation was led by Idi Amin as president from 1971 through 1979?'' 7/10 wrong (6 Nigeria, 1 Sudan); the answer is Uganda.
-\item \emph{Original:} ``The Suez Canal joins the Red Sea and which other body of water?'' \emph{Rephrased (passive voice):} ``By which other body of water is the Suez Canal joined to the Red Sea?'' 8/10 answer the Gulf of Suez, itself part of the Red Sea, instead of the Mediterranean.
+\item \emph{Original:} ``In 1986, whilst facing England which West Indian batsman scored the fastest ever Test century in just 56 balls?'' \emph{Rephrased:} ``During the 1986 Test series against England, which West Indian batsman scored the fastest ever Test century, reaching it in just 56 balls?'' 8/10 wrong (Gordon Greenidge, Brian Lara, Desmond Haynes); the answer is Viv Richards.
 \item \emph{Original:} ``Franco Alfano completed which Puccini opera after the composer's death in 1924?'' \emph{Rephrased:} ``Which of Puccini's operas, left unfinished at his 1924 death, was completed by Franco Alfano?'' 6/10 wrong (\emph{Il trittico}, \emph{La fanciulla del West}, \emph{Madama Butterfly}); the answer is \emph{Turandot}.
 \end{itemize}
 
@@ -169,7 +169,9 @@ These are distribution shifts, not deterministic switches: the model still gives
 
 \paragraph{Reduced scope.} The main run covers 120 of 202 attackable questions with a 10-generation budget; success rates under the planned 20 generations would be at least as high.
 
-\paragraph{Validator calibration and review.} The intermediate report proposed calibrating the judge against about 200 human-labeled pairs. We built the tooling (blind labeling sheet, population-weighted precision and recall) but report only the review of the 26 flips, where the strict judge's precision was 20/26 (77\%): even the strict judge lets through rephrasings that keep the topic but change the question, and an optimizer will find them. The review itself used LLM-proposed labels approved by the author rather than independent blind annotation by several people, so it may share the assistant's judgment errors.
+\paragraph{Validator calibration and review.} The intermediate report proposed calibrating the judge against about 200 human-labeled pairs. We built the tooling (blind labeling sheet, population-weighted precision and recall) but report only the review of the 26 flips, where the strict judge's precision was 17/26 (65\%): even the strict judge lets through rephrasings that keep the topic but change the question, and an optimizer will find them. The review itself used LLM-proposed labels approved by the author rather than independent blind annotation by several people, so it may share the assistant's judgment errors.
+
+\paragraph{Empty responses.} With reasoning enabled, the target occasionally spends its token budget before answering and returns empty text (62 of 35{,}820 samples in the main run). These count as refusals; one apparent flip rested mostly on them and was rejected in review. A larger output budget would avoid this.
 
 \paragraph{Same-family grading.} The grader (\texttt{gpt-oss-120b}) is from the same family as the target. A cross-vendor grader would remove any shared blind spot.
 

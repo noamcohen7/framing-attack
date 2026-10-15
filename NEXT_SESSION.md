@@ -42,7 +42,7 @@ in `.env`, which is git-ignored.
 
 Main run (results/strict/, config/full-run-strict.yaml, --shuffle-seed 42
 --max-attacked 120, 10 generations): 120 attacked, 26 confirmed flips
-(21.7%), 19 after review (15.8%, CI 10.4-23.4). Confirmed noise floor 5.4%
+(21.7%), 15 after review (12.5%, CI 7.7-19.6; second pass against raw responses). Confirmed noise floor 5.4%
 (scripts/confirm_noise_floor.py). Lenient run (results/, paused at 90
 attacked) audited with scripts/audit_flips.py: 15 of 36 flips survive.
 Review labels: LLM-proposed (results/strict/review_proposed.csv), approved
