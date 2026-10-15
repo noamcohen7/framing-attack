@@ -38,6 +38,21 @@ Keys: Groq from https://console.groq.com/keys (starts `gsk_`); Gemini from
 https://aistudio.google.com/apikey (starts `AIza` or `AQ.`). Keys live only
 in `.env`, which is git-ignored.
 
+## Status 2026-10-15: final report drafted (paper/final_report.tex)
+
+Main run (results/strict/, config/full-run-strict.yaml, --shuffle-seed 42
+--max-attacked 120, 10 generations): 120 attacked, 26 confirmed flips
+(21.7%), 19 after review (15.8%, CI 10.4-23.4). Confirmed noise floor 5.4%
+(scripts/confirm_noise_floor.py). Lenient run (results/, paused at 90
+attacked) audited with scripts/audit_flips.py: 15 of 36 flips survive.
+Review labels: LLM-proposed (results/strict/review_proposed.csv), approved
+by the author -> results/strict/review.csv. Total API spend ~$8.65.
+
+Not done (future work in the paper): transferability, equal-budget
+best-of-N baseline, ablations, defenses, ~200-pair judge calibration.
+Hidden-character filter and parallel grading postdate the main run's start
+(filter applied in analysis).
+
 ## Session 2026-10-14: what changed
 
 - Groq models swapped to gpt-oss-20b / gpt-oss-120b; new `reasoning_effort`
