@@ -23,6 +23,8 @@ fi
 out="$(mktemp -d)"
 mkdir -p "$out/$group/code" "$out/$group/report"
 git archive HEAD | tar -x -C "$out/$group/code"
+# Personal / session notes are not part of the submission.
+rm -f "$out/$group/code/my_text_for_claude" "$out/$group/code/NEXT_SESSION.md"
 cp paper/final_report.tex "$out/$group/report/"
 cp "$pdf" "$out/$group/report/${group}_report.pdf"
 
