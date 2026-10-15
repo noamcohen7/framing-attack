@@ -5,6 +5,7 @@
 
 \usepackage{booktabs}
 \usepackage{xcolor}
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{[#1]}}}
 
 % ---------------------------------------------------------------------------
 % Results of the MAIN (strict) run: from results/strict/report.md
@@ -30,7 +31,7 @@
 \affiliation{\institution{Tel Aviv University}\country{}}
 
 \begin{abstract}
-Large language models (LLMs) are increasingly trusted as authorities for knowledge-intensive tasks such as fact checking. We ask whether this trust is robust to \emph{framing}: can a fluent, meaning-preserving rephrasing of a factual question---one a human would accept as the same question---steer a black-box LLM to a wrong answer? We build a black-box attack in which an auxiliary LLM proposes rephrasings, a semantic-equivalence judge rejects any that change the question, and an evolutionary search keeps the rephrasings that most often make the target answer wrong. Against \texttt{gpt-oss-20b} on 350 questions (TriviaQA plus a hand-built recency set), the attack flips the answer on \asr{} of the questions the model otherwise answers correctly (95\% CI \asrCI{}), and on \asrHuman{} (\asrHumanCI{}) after manual review of every flip, against 5.4\% for unoptimized paraphrases put through the same automatic checks. Our main methodological finding is that the attack is only as honest as its validator: with a lenient judge and string-matched answers, 40\% of questions appeared to flip, but only 42\% of those flips survived a stricter judge and model-based grading. The search had learned to exploit the validator---for example by turning ``Which \emph{country} won the 2022 World Cup?'' into ``\emph{Who} lifted the trophy?''. We describe the safeguards this required: native-accuracy gating, re-testing on fresh samples, a strict answer-type-aware judge, and grading against the original question.
+LLMs are increasingly trusted as authorities for fact checking. We ask whether this trust survives \emph{framing}: can a fluent rephrasing of a factual question, one a human would accept as the same question, steer a black-box LLM to a wrong answer? Our attack pairs an auxiliary LLM that proposes rephrasings with an evolutionary search that keeps those most often answered wrongly, under a semantic-equivalence judge. Against \texttt{gpt-oss-20b} on questions it answers correctly, the attack flips the answer on \asr{} of questions (95\% CI \asrCI{}) and on \asrHuman{} (\asrHumanCI{}) after manual review, against 5.4\% for unoptimized paraphrases under the same automatic checks. Our main finding is methodological: the attack is only as honest as its validator. With a lenient judge and string-matched answers, 40\% of questions appeared to flip, but only 42\% of those flips held up under stricter checks; the search had learned to exploit the validator, for example by turning ``Which \emph{country} won the 2022 World Cup?'' into ``\emph{Who} lifted the trophy?''. We describe the safeguards this required: native-accuracy gating, re-testing on fresh samples, a strict answer-type-aware judge, and grading against the original question.
 \end{abstract}
 
 \maketitle
@@ -54,7 +55,7 @@ We test that assumption. Given a factual question $q$ with an unambiguous answer
 \paragraph{Prompt optimization.} Our search follows the evolutionary, LLM-as-mutation-operator style of reflective prompt evolution such as GEPA~\cite{agrawal2025}.
 
 % ===========================================================================
-\section{Method}
+\section{Technical Approach}
 \subsection{Attack loop}
 For each question the search runs as follows.
 
@@ -80,7 +81,8 @@ Each of the following was added after an earlier version of the pipeline produce
 \paragraph{Grading against the original question.}\label{sec:grading} Instead of extracting a short answer and string-matching it to the ground truth, an LLM grader sees the \emph{original} question, the expected answer, and the target's response, and returns correct, incorrect, or no answer. Grading against the original question prevents a rephrasing from redefining what counts as correct.
 
 % ===========================================================================
-\section{Experimental Setup}
+\section{Results}
+\subsection{Experiment design}
 \paragraph{Models.} Target: \texttt{gpt-oss-20b} (open weights, reasoning effort low), chosen as a weak model on which flips should be common. Auxiliary (paraphrasing, grading): \texttt{gpt-oss-120b}. Both are served by DeepInfra. Judge: \texttt{gemini-3.5-flash-lite} (Google). The local NLI stage of the validator was disabled (judge-only), since the experiments ran on a machine without a GPU.
 
 \paragraph{Data.} 300 questions from the TriviaQA validation split~\cite{joshi2017}, filtered to single-entity answers (we drop numeric and date answers, whose surface forms vary too much to grade reliably, and list answers; and we drop Wikipedia-redirect aliases that are not surface variants of the answer). Plus 50 hand-built facts: 23 recent but pre-cutoff events (e.g.\ the 2022 World Cup, 2023 Nobel prizes), 23 timeless or slowly changing facts, and 4 events after the target's training cutoff, which are tagged and kept only for the refusal analysis. Time-sensitive facts were verified on 2026-10-14.
@@ -89,8 +91,6 @@ Each of the following was added after an earlier version of the pipeline produce
 
 \paragraph{Cost.} All runs together cost about \$8.64 in API fees (about 305{,}000 requests), enforced by a hard client-side budget cap shared across processes.
 
-% ===========================================================================
-\section{Results}
 
 \subsection{Baseline and noise floor}
 The target answers 61.6\% of native samples correctly (native error 36.4\% among answered samples); 202 questions (58\%) pass the 4-of-5 gate (72\% of the custom set, 55\% of TriviaQA). Refusals are uncommon (5.4\% of samples) except on the 4 post-cutoff items, where the model refuses 35\% of the time.
@@ -162,7 +162,10 @@ The verified flips are strikingly mundane. None uses an exotic trick; most are a
 These are distribution shifts, not deterministic switches: the model still gives the right answer on some samples (1--3 of 10 above). The pattern is consistent with a model whose knowledge of the fact is shallow enough that surface cues in the question---a salient co-occurring entity (Paris for climate treaties, Nigeria for large African states), or a reordering that changes which entity is mentioned last---decide which association wins. Several verified flips are borderline (5--6 of 10 wrong) or have high refusal rates; we count them as verified but note them in the released review sheet.
 
 % ===========================================================================
-\section{Limitations}\label{sec:limits}
+\section{Discussion}
+The broader consequence of our results is twofold. For users of LLMs as fact checkers, an answer can hinge on harmless-looking wording even for facts the model knows. For researchers measuring such fragility, an optimizer turned against a validator finds the validator's blind spots first, so reported attack success rates are only as credible as the checks behind them.
+
+\subsection{Limitations}\label{sec:limits}
 \paragraph{One target model.} We attacked a single, deliberately weak open model. Transferability to other models, planned in the intermediate report, remains future work; the saved rephrasings make it a re-scoring exercise.
 
 \paragraph{Budget and the noise floor.} The attack evaluates tens to a hundred-plus candidates per question, the noise floor five. The re-test on fresh samples removes the selection bias of picking the best of many noisy scores, but an equal-budget best-of-$N$ random baseline, which we did not run, is needed to attribute the gain to the evolutionary search rather than to the number of tries.
@@ -176,15 +179,15 @@ These are distribution shifts, not deterministic switches: the model still gives
 \paragraph{Same-family grading.} The grader (\texttt{gpt-oss-120b}) is from the same family as the target. A cross-vendor grader would remove any shared blind spot.
 
 % ===========================================================================
-\section{Defenses and Future Work}
+\subsection{Defenses and future work}
 Our results suggest two cheap defenses, which we leave to future work: \emph{self-consistency over paraphrases}, answering several internally generated rephrasings of a question and aggregating, since the attack relies on one rephrasing pulling the model off its majority answer; and \emph{answer aggregation across samples}, since many flips are a shift in the answer distribution rather than a deterministic change. Further next steps: transferability across vendors, the equal-budget random baseline, and a taxonomy of successful framings over a larger set of human-verified flips.
 
 % ===========================================================================
-\section{Ethical Considerations}
+\subsection{Ethical considerations}
 We demonstrate how to induce factual errors in systems the public treats as authoritative. All experiments are our own queries to publicly available models; we do not publish misleading content, and all elicited errors concern facts with well-established ground truth, used only for measurement. The verified flips are generic rewordings rather than reusable exploits, and we frame the work as motivating validators and defenses. We complied with each provider's terms of service and rate limits.
 
 % ===========================================================================
-\section{Reproducibility}
+\subsection{Reproducibility}
 Code, configurations and tests are in the project repository; the main run is
 \begin{flushleft}\small\ttfamily
 scripts/run\_attack.py\\
@@ -192,6 +195,15 @@ scripts/run\_attack.py\\
 \quad -{}-shuffle-seed 42 -{}-max-attacked 120
 \end{flushleft}
 \noindent and \texttt{scripts/analyze.py} and \texttt{scripts/audit\_flips.py} regenerate the tables. The seed fixes which questions are attacked; model outputs are sampled, so exact numbers vary slightly between runs.
+
+% ===========================================================================
+\section{Conclusion}
+Fluent, meaning-preserving rephrasings can flip a black-box LLM's answers to factual questions it otherwise answers correctly: our evolutionary attack does so on \asrHuman{} of such questions after manual review, about twice the rate of unoptimized paraphrasing. The flips are mundane rewordings, not tricks, and they shift the model's answer distribution rather than switching it deterministically. Just as important, measuring this honestly required closing a series of loopholes the search actively exploited: noisy scores, a lenient equivalence judge, string-matched answers, and invisible characters. Attacks of this kind are only as trustworthy as their validators.
+
+% ===========================================================================
+\section{Contributions}
+% TODO(author): replace with each team member's name and contribution.
+\TODO{Team member 1 -- contributions. Team member 2 -- contributions. Team member 3 -- contributions.}
 
 \begin{thebibliography}{12}
 \bibitem{agrawal2025} L.~A. Agrawal et al. GEPA: Reflective prompt evolution can outperform reinforcement learning. \emph{arXiv preprint}, 2025.
