@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Build the course submission tarball:
-#   <groupname>.tar.gz  ->  <groupname>/code/   (committed code + README.md)
+#   <groupname>.tgz  ->  <groupname>/code/   (committed code + README.md)
 #                           <groupname>/report/ (LaTeX source + PDF)
 #
 # Usage: scripts/make_submission.sh <groupname> <path/to/report.pdf>
+# (solo submission: use your student ID as <groupname>)
 #
 # Code is taken from the last commit with `git archive`, so untracked and
 # git-ignored files (.env with API keys, results/, .venv/) are never included.
@@ -33,7 +34,7 @@ if find "$out/$group" -name ".env" -o -name "*.key" | grep -q . ; then
   echo "Refusing: a secrets file ended up in the package." >&2; exit 1
 fi
 
-tar -czf "$root/$group.tar.gz" -C "$out" "$group"
+tar -czf "$root/$group.tgz" -C "$out" "$group"
 rm -rf "$out"
-echo "Wrote $root/$group.tar.gz"
-tar -tzf "$root/$group.tar.gz" | awk -F/ 'NF<=3' | sort -u | head -40
+echo "Wrote $root/$group.tgz"
+tar -tzf "$root/$group.tgz" | awk -F/ 'NF<=3' | sort -u | head -40
