@@ -84,3 +84,18 @@ def test_strict_judge_uses_strict_prompt():
     LLMJudge(Rec()).check_equivalence("A?", "B?")
     assert "KIND of answer" in seen[0] and "KIND of answer" not in seen[1]
     assert STRICT_JUDGE_PROMPT != JUDGE_PROMPT
+
+
+def test_hidden_characters_rejected_before_judge():
+    from src.equivalence.validator import SemanticEquivalenceValidator, hidden_characters
+
+    class NeverCalled:
+        def generate(self, *a, **k):
+            raise AssertionError("judge must not be called")
+
+    assert hidden_characters("sacr​edotal") == ["U+200B"]
+    assert hidden_characters("Plain question, with tab\tand newline\n?") == []
+    assert hidden_characters("Café — “quoted” Río") == []          # visible non-ASCII is fine
+    v = SemanticEquivalenceValidator(nli_model=None, llm=NeverCalled(), require_both=False)
+    r = v.validate("What does sacerdotal mean?", "What does sacr​edotal mean?")
+    assert not r.is_equivalent and "U+200B" in r.reason

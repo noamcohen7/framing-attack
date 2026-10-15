@@ -94,3 +94,17 @@ def test_review_sheet_roundtrip(tmp_path):
 def test_format_report_renders():
     text = format_report(attack_summary(PAYLOAD), noise_floor({"per_question": []}))
     assert "Success rate" in text and "**50.0%**" in text and "Noise floor" in text
+
+
+def test_hidden_character_flips_are_discarded(tmp_path):
+    payload = {"results": [
+        result("triviaqa_1", True, [cand("sacr​edotal?", 1.0, confirm=0.9)]),
+        result("triviaqa_2", True, [cand("clean?", 1.0, confirm=0.9)]),
+    ], "skipped": [], "failed": []}
+    s = attack_summary(payload)
+    assert s["overall"]["flips"] == 1 and s["invalid_hidden_characters"] == ["triviaqa_1"]
+    path = tmp_path / "review.csv"
+    write_review_sheet(payload, path)
+    rows = list(csv.DictReader(open(path)))
+    assert rows[0]["auto_flag"].startswith("INVALID") and rows[0]["rewrite_equivalent"] == "n"
+    assert rows[1]["auto_flag"] == ""

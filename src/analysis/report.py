@@ -16,6 +16,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Optional
 
+from src.equivalence.validator import hidden_characters
+
 _YES = {"y", "yes", "1", "true", "t"}
 _NO = {"n", "no", "0", "false", "f"}
 
@@ -39,11 +41,18 @@ def winning_candidate(result: dict) -> Optional[dict]:
     """The rephrasing that passed the fresh-sample re-test (None if no flip)."""
     if not result.get("success"):
         return None
+    # (callers check `violates_constraints` separately)
     confirmed = [c for c in result.get("all_valid_candidates", [])
                  if c.get("confirm", {}).get("score", 0) > 0.5]
     if confirmed:
         return max(confirmed, key=lambda c: c["confirm"]["score"])
     return result.get("best_candidate")  # confirmation disabled
+
+
+def violates_constraints(result: dict) -> bool:
+    """A flip whose winning rephrasing breaks a hard rule (hidden characters)."""
+    c = winning_candidate(result)
+    return c is not None and bool(hidden_characters(c["paraphrase"]))
 
 
 def attack_summary(payload: dict, human: Optional[dict[str, bool]] = None) -> dict:
@@ -55,8 +64,13 @@ def attack_summary(payload: dict, human: Optional[dict[str, bool]] = None) -> di
     human-verified success rate (unreviewed flips count as not verified).
     """
     results = payload.get("results", [])
+    # Flips that break a hard constraint count as failures (conservative: the
+    # search for that question stopped at an invalid rephrasing).
+    invalid = {r["id"] for r in results if r.get("success") and violates_constraints(r)}
+    results = [dict(r, success=False) if r["id"] in invalid else r for r in results]
     out: dict = {"attacked": len(results), "skipped": len(payload.get("skipped", [])),
-                 "failed": len(payload.get("failed", []))}
+                 "failed": len(payload.get("failed", [])),
+                 "invalid_hidden_characters": sorted(invalid)}
 
     def rate(rows, key="flips"):
         k = sum(1 for r in rows if r.get("success"))
@@ -127,14 +141,17 @@ def write_review_sheet(payload: dict, path: Path) -> int:
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["id", "original_question", "rewrite", "expected_answer",
-                    "model_answers_on_rewrite", "rewrite_equivalent", "answer_wrong", "notes"])
+                    "model_answers_on_rewrite", "auto_flag", "rewrite_equivalent", "answer_wrong", "notes"])
         for r in payload.get("results", []):
             c = winning_candidate(r)
             if c is None:
                 continue
             answers = (c.get("confirm") or {}).get("extracted_answers") or c.get("extracted_answers") or []
+            hidden = hidden_characters(c["paraphrase"])
+            flag = f"INVALID: hidden characters {', '.join(sorted(set(hidden)))}" if hidden else ""
             w.writerow([r["id"], r["question"], c["paraphrase"], r["ground_truth"],
-                        " | ".join(a for a in answers if a), "", "", ""])
+                        " | ".join(a for a in answers if a), flag,
+                        "n" if hidden else "", "", ""])
             rows += 1
     return rows
 
@@ -161,7 +178,11 @@ def format_report(summary: dict, floor: Optional[dict] = None, title: str = "Att
     o = summary["overall"]
     lines = [f"# {title}", "",
              f"Questions attacked: **{summary['attacked']}** "
-             f"(skipped as not known: {summary['skipped']}, failed: {summary['failed']})", "",
+             f"(skipped as not known: {summary['skipped']}, failed: {summary['failed']})", ""]
+    if summary.get("invalid_hidden_characters"):
+        lines += [f"Flips discarded for hidden characters: {len(summary['invalid_hidden_characters'])} "
+                  f"({', '.join(summary['invalid_hidden_characters'])})", ""]
+    lines += [
              "| Group | Attacked | Confirmed flips | Success rate | 95% CI |",
              "|---|---|---|---|---|",
              f"| **All** | {o['n']} | {o['flips']} | **{pct(o['rate'])}** | {ci(o['ci95'])} |"]

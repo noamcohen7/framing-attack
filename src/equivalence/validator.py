@@ -12,6 +12,8 @@ changes the question's meaning.
 
 from __future__ import annotations
 
+import unicodedata
+
 import logging
 from dataclasses import dataclass
 from typing import Optional
@@ -30,6 +32,24 @@ class EquivalenceResult:
     nli_result: Optional[dict] = None
     llm_result: Optional[dict] = None
     reason: str = ""
+
+
+_ALLOWED_CONTROL = {"\n", "\t"}
+
+
+def hidden_characters(text: str) -> list[str]:
+    """
+    Invisible / non-printing characters in `text` (zero-width spaces, joiners,
+    bidi marks, control codes): Unicode categories Cf, Cc, Co, Cs.
+
+    The attack forbids them (a human cannot see them), and an LLM judge
+    reading the text cannot either; in the main run the search found that a
+    zero-width space inside a word ("sacr\u200bedotal") confuses the target.
+    """
+    return [
+        f"U+{ord(c):04X}" for c in text
+        if c not in _ALLOWED_CONTROL and unicodedata.category(c) in ("Cf", "Cc", "Co", "Cs")
+    ]
 
 
 class SemanticEquivalenceValidator:
@@ -92,6 +112,14 @@ class SemanticEquivalenceValidator:
         Returns:
             EquivalenceResult with detailed scores and verdict.
         """
+        # Hard constraint, checked before any model: no invisible characters.
+        hidden = hidden_characters(paraphrase)
+        if hidden:
+            return EquivalenceResult(
+                is_equivalent=False,
+                reason=f"Hidden characters not allowed: {', '.join(sorted(set(hidden)))}",
+            )
+
         # Judge-only mode (no local NLI model)
         if self.nli is None:
             llm_result = self.llm_judge.check_equivalence(original, paraphrase)
