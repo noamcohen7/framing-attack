@@ -108,10 +108,19 @@ class TestGrade:
                 self.prompts.append(prompt)
                 return LLMResponse(text=self.texts.pop(0), model="s", provider="fake")
 
+        class KeyedGrader(Scripted):
+            """Verdict chosen by the response text in the prompt (calls may run in parallel)."""
+            VERDICTS = {"Loreen won for Sweden.": "VERDICT: CORRECT\nANSWER: Loreen (Sweden)",
+                        "Ukraine won.": "VERDICT: INCORRECT\nANSWER: Ukraine",
+                        "No idea.": "VERDICT: NO_ANSWER\nANSWER: NO_ANSWER"}
+
+            def _generate(self, prompt: str, temperature: Optional[float] = None):
+                self.prompts.append(prompt)
+                text = next(v for k, v in self.VERDICTS.items() if k in prompt)
+                return LLMResponse(text=text, model="s", provider="fake")
+
         target = Scripted(["Loreen won for Sweden.", "Ukraine won.", "No idea."])
-        grader = Scripted(["VERDICT: CORRECT\nANSWER: Loreen (Sweden)",
-                           "VERDICT: INCORRECT\nANSWER: Ukraine",
-                           "VERDICT: NO_ANSWER\nANSWER: NO_ANSWER"])
+        grader = KeyedGrader([])
         qa = QAItem(id="q", question="Which country won Eurovision 2023?", answer="Sweden")
         scorer = WrongnessScorer(target, AnswerExtractor(method="grade", llm=grader), num_samples=3)
         r = scorer.score(qa, "Who took first place at Eurovision 2023?")
