@@ -77,6 +77,8 @@ Each of the following was added after an earlier version of the pipeline produce
 
 \paragraph{Strict equivalence judge.}\label{sec:validator} An LLM judge (\texttt{gemini-3.5-flash-lite}, a different vendor from the target and auxiliary) decides whether two questions admit exactly the same correct answers. The strict prompt explicitly rejects changes in the \emph{kind} of answer requested (country vs.\ person), in scope or time frame, in the deciding criterion (``longest by overall length''), appeals to a source or authority that could change the answer, and added premises, while accepting changes of wording, register, voice, or politeness.
 
+\paragraph{Hidden-character filter.} Rephrasings containing invisible or non-printing characters (Unicode categories Cf, Cc, Co, Cs; e.g.\ zero-width spaces) are rejected by a deterministic check before any model is consulted. The LLM judge cannot see such characters, and the auxiliary model occasionally emits them; see \S\ref{sec:exploit}. Flips found before this filter was added are discarded in the analysis.
+
 \paragraph{Grading against the original question.}\label{sec:grading} Instead of extracting a short answer and string-matching it to the ground truth, an LLM grader sees the \emph{original} question, the expected answer, and the target's response, and returns correct, incorrect, or no answer. Grading against the original question prevents a rephrasing from redefining what counts as correct.
 
 % ===========================================================================
@@ -119,7 +121,7 @@ Table~\ref{tab:main} gives the main result. The attack flips \asr{} of attacked 
 
 \TBD{1--2 sentences comparing to the noise floor once numbers are in.}
 
-\subsection{The optimizer exploits a lenient validator}
+\subsection{The optimizer exploits a lenient validator}\label{sec:exploit}
 \begin{table}[t]
 \caption{Flips found by the lenient pipeline (90 attacked questions), re-checked with the strict judge and the LLM grader.}
 \label{tab:audit}
@@ -138,6 +140,8 @@ Our first full run used the lenient judge and string matching. It reported a 40\
 \emph{The search changes the question.} ``Which country won the 2022 FIFA World Cup?'' became ``Who lifted the trophy at the 2022 FIFA World Cup?'', to which ``Lionel Messi'' is a correct answer. The same move (\emph{which country} $\rightarrow$ \emph{who}) recurred for Eurovision 2023. Others changed the deciding criterion (``\ldots rank as the longest \emph{based on overall length}'', inviting the Amazon) or embedded the answer in the question.
 
 \emph{The checker misses correct answers.} String matching scored ``College of Cardinals'' (for \emph{conclave}), ``Thomas Edward Yorke'' (for Thom Yorke) and ``Mammalia'' as wrong; 13 apparent flips were the model answering correctly in a different surface form.
+
+\emph{Invisible characters.} The auxiliary model occasionally inserts a zero-width space (U+200B) inside a word: in 5 of 8{,}489 accepted candidates in the lenient run and 1 of the first 336 in the main run. Usually it is harmless, but inside a rare word it can derail the target: ``What subject does the term `sacr\textbar{}edotal' pertain to?'' (zero-width space at the bar) drew answers about ``sacred narratives'' and ``sacramental theology'' instead of \emph{the priesthood}, scored 1.0, and won its search. The judge, reading text, cannot see the character; the rephrasing violates the attack's own constraint. We now reject such characters deterministically.
 
 \emph{Ground truth is genuinely contested.} The Nile/Amazon ``longest river'' question has no uncontested answer and should not be in a framing benchmark.
 
