@@ -98,7 +98,7 @@ Unoptimized paraphrases already move the model. On the 202 questions it knows, a
 
 Most of this is noise and meaning drift, however. Putting those 56 paraphrases through the \emph{same} checks as attack flips---hidden-character filter, strict judge, and re-test on 10 fresh samples---removes 14 as non-equivalent and 26 as failing the re-test, leaving \textbf{11 questions: a confirmed noise floor of 5.4\%} (95\% CI 3.1--9.5\%). This is the baseline an optimized attack must clear. It is still not an equal-budget comparison: the attack evaluates far more candidates per question (\S\ref{sec:limits}).
 
-\subsection{Main result}
+\subsection{Main result}\label{sec:main}
 \begin{table}[t]
 \caption{Attack success on questions the target answers correctly (native accuracy $\ge$ 4/5). Strict judge, LLM grading, 10-generation budget, flips confirmed on 10 fresh samples.}
 \label{tab:main}
@@ -201,7 +201,7 @@ Fluent, meaning-preserving rephrasings can flip a black-box LLM's answers to fac
 
 % ===========================================================================
 \section{Contributions}
-This project was carried out by a single author, Noam Cohen: study design, experiments, analysis, and the report. An AI assistant (Claude) was used for implementation, running the experiments, and drafting text, and to propose the review labels described in Section~5.2; all results were checked and approved by the author.
+This project was carried out by a single author, Noam Cohen: study design, experiments, analysis, and the report. An AI assistant (Claude) was used for implementation, running the experiments, and drafting text, and to propose the review labels described in Section~\ref{sec:main}; all results were checked and approved by the author.
 
 \begin{thebibliography}{12}
 \bibitem{agrawal2025} L.~A. Agrawal et al. GEPA: Reflective prompt evolution can outperform reinforcement learning. \emph{arXiv preprint}, 2025.
